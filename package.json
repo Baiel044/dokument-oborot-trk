@@ -1,0 +1,17 @@
+{
+  "name": "dokument-oborot-trk",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Electronic document workflow system for Tash-Kumyr Regional College",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "render-build": "npm run install:all && npm run build",
+    "start": "npm --prefix backend run start"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
