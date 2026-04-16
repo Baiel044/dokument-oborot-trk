@@ -1,7 +1,7 @@
 const express = require("express");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { authenticate } = require("../middleware/auth");
-const { sanitizeUser } = require("../utils/auth");
+const { hashPassword, sanitizeUser } = require("../utils/auth");
 const { getDepartmentTitle, getRoleTitle } = require("../utils/catalogs");
 
 const router = express.Router();
@@ -55,7 +55,7 @@ router.get("/", authenticate, (req, res) => {
   res.json({ users: users.map(enrichUser) });
 });
 
-router.put("/:id", authenticate, (req, res) => {
+router.put("/:id", authenticate, async (req, res) => {
   const db = readDb();
   const userIndex = db.users.findIndex((item) => item.id === req.params.id);
 
@@ -70,15 +70,63 @@ router.put("/:id", authenticate, (req, res) => {
     return res.status(403).json({ message: "Түзөтүүгө укук жетишсиз." });
   }
 
+  if (isSelf && req.body.status !== undefined && req.body.status !== "active") {
+    return res.status(400).json({ message: "Өз аккаунтуңузду бөгөттөөгө болбойт." });
+  }
+
+  if (isSelf && req.body.roleCode !== undefined && req.body.roleCode !== target.roleCode) {
+    return res.status(400).json({ message: "Өз ролуңузду өзгөртүүгө болбойт." });
+  }
+
   const allowedFields = canManageUsers(req.user)
-    ? ["fullName", "email", "phone", "position", "departmentId", "roleCode", "status"]
+    ? ["fullName", "email", "phone", "username", "position", "departmentId", "roleCode", "status"]
     : ["fullName", "email", "phone", "position"];
 
-  allowedFields.forEach((field) => {
-    if (req.body[field] !== undefined) {
-      target[field] = req.body[field];
+  if (allowedFields.includes("email") && req.body.email !== undefined) {
+    const email = String(req.body.email).trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: "Email милдеттүү." });
     }
-  });
+    const emailTaken = db.users.some((item) => item.id !== target.id && item.email === email);
+    if (emailTaken) {
+      return res.status(409).json({ message: "Бул email мурун катталган." });
+    }
+    target.email = email;
+  }
+
+  if (allowedFields.includes("username") && req.body.username !== undefined) {
+    const username = String(req.body.username).trim();
+    if (!username) {
+      return res.status(400).json({ message: "Логин милдеттүү." });
+    }
+    const usernameTaken = db.users.some(
+      (item) => item.id !== target.id && item.username.toLowerCase() === username.toLowerCase()
+    );
+    if (usernameTaken) {
+      return res.status(409).json({ message: "Бул логин мурун катталган." });
+    }
+    target.username = username;
+  }
+
+  allowedFields
+    .filter((field) => !["email", "username"].includes(field))
+    .forEach((field) => {
+      if (req.body[field] !== undefined) {
+        target[field] = req.body[field];
+      }
+    });
+
+  if (req.body.password !== undefined && String(req.body.password).trim()) {
+    if (req.user.roleCode !== "ADMIN") {
+      return res.status(403).json({ message: "Сырсөздү администратор гана өзгөртө алат." });
+    }
+
+    const password = String(req.body.password).trim();
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Сырсөз кеминде 6 белгиден турушу керек." });
+    }
+    target.passwordHash = await hashPassword(password);
+  }
 
   if (target.status === "active" && !target.approvedAt) {
     target.approvedAt = new Date().toISOString();

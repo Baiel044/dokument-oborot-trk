@@ -131,6 +131,7 @@ label {
 
 .primary-button,
 .ghost-button,
+.danger-button,
 .ghost-button--link {
   display: inline-flex;
   align-items: center;
@@ -157,8 +158,15 @@ label {
   border: 1px solid var(--border);
 }
 
+.danger-button {
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid #fecdd3;
+}
+
 .primary-button:hover,
 .ghost-button:hover,
+.danger-button:hover,
 .ghost-button--link:hover {
   transform: translateY(-1px);
 }
@@ -171,6 +179,19 @@ label {
 .ghost-button--link:hover {
   border-color: rgba(47, 128, 237, 0.45);
   background: var(--blue-soft);
+}
+
+.danger-button:hover {
+  border-color: #fca5a5;
+  background: #ffe4e6;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .auth-layout {
@@ -526,6 +547,25 @@ label {
 
 .form-success {
   color: var(--green);
+}
+
+.form-alert {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-weight: 750;
+}
+
+.form-alert--success {
+  color: #15803d;
+  background: var(--green-soft);
+  border: 1px solid #bde8c9;
+}
+
+.form-alert--error {
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid #fecdd3;
 }
 
 .app-shell {
@@ -908,6 +948,50 @@ label {
   font-size: 13px;
 }
 
+.admin-user-list {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-user-card {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.admin-user-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.admin-user-card__header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.admin-user-card__form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .panel__header--with-badge {
   align-items: center;
 }
@@ -1032,7 +1116,8 @@ label {
   .app-shell,
   .panel-grid,
   .stat-grid,
-  .detail-grid {
+  .detail-grid,
+  .admin-user-card__form {
     grid-template-columns: 1fr;
   }
 
@@ -1093,6 +1178,7 @@ label {
   .auth-hero__actions .ghost-button,
   .inline-actions .primary-button,
   .inline-actions .ghost-button,
+  .inline-actions .danger-button,
   .request-row__actions .primary-button,
   .request-row__actions .ghost-button {
     width: 100%;
