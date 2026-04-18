@@ -1014,6 +1014,23 @@ textarea:disabled {
   gap: 18px;
 }
 
+.admin-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  color: var(--blue);
+  background: var(--blue-soft);
+  border: 1px solid #cfe1f8;
+}
+
+.admin-filter span {
+  font-weight: 850;
+}
+
 .admin-user-card {
   display: grid;
   gap: 18px;

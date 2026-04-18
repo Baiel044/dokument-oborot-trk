@@ -201,7 +201,7 @@ export function AppShell() {
     const timeoutId = window.setTimeout(async () => {
       setIsSearching(true);
 
-      const canSearchUsers = ["ADMIN", "DIRECTOR", "HR"].includes(user.roleCode);
+      const canSearchUsers = ["ADMIN", "DIRECTOR"].includes(user.roleCode);
       const requests = [
         api.get("/api/messages"),
         api.get("/api/requests"),
@@ -289,7 +289,7 @@ export function AppShell() {
                 type: shellLabels.users,
                 title: item.fullName,
                 text: item.username || item.email,
-                to: "/users",
+                to: `/admin?user=${encodeURIComponent(item.id)}`,
               }))
           : [];
 

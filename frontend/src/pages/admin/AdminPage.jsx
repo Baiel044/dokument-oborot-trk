@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { api } from "../../services/api";
@@ -31,11 +32,14 @@ function buildUserDraft(user) {
 export function AdminPage() {
   const { user } = useAuth();
   const { language, t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [auditLogs, setAuditLogs] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [users, setUsers] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [feedback, setFeedback] = useState({ type: "", text: "" });
+  const selectedUserId = searchParams.get("user");
+  const visibleUsers = selectedUserId ? users.filter((item) => item.id === selectedUserId) : users;
 
   const labels =
     language === "ru"
@@ -58,6 +62,9 @@ export function AdminPage() {
           deleted: "Пользователь удалён.",
           confirmDelete: "Удалить пользователя",
           onlyAdmin: "Редактирование логинов, паролей и удаление доступно только администратору.",
+          searchFilter: "Показан пользователь из поиска",
+          showAll: "Показать всех пользователей",
+          userNotFound: "Пользователь из поиска не найден.",
         }
       : {
           usersAccess: "Колдонуучулар жана жеткиликтүүлүк",
@@ -78,6 +85,9 @@ export function AdminPage() {
           deleted: "Колдонуучу өчүрүлдү.",
           confirmDelete: "Колдонуучуну өчүрүү",
           onlyAdmin: "Логин, сырсөз өзгөртүү жана өчүрүү администраторго гана жеткиликтүү.",
+          searchFilter: "Издөөдөн тандалган колдонуучу көрсөтүлдү",
+          showAll: "Бардык колдонуучуларды көрсөтүү",
+          userNotFound: "Издөөдөн тандалган колдонуучу табылган жок.",
         };
 
   useEffect(() => {
@@ -174,8 +184,17 @@ export function AdminPage() {
 
         {user.roleCode !== "ADMIN" ? <p className="muted-text">{labels.onlyAdmin}</p> : null}
 
+        {selectedUserId ? (
+          <div className="admin-filter">
+            <span>{visibleUsers.length ? labels.searchFilter : labels.userNotFound}</span>
+            <button className="ghost-button" onClick={() => setSearchParams({})}>
+              {labels.showAll}
+            </button>
+          </div>
+        ) : null}
+
         <div className="admin-user-list">
-          {users.map((item) => {
+          {visibleUsers.map((item) => {
             const draft = drafts[item.id] || buildUserDraft(item);
             const isSelf = item.id === user.id;
 
