@@ -94,6 +94,13 @@ const links = [
   { to: "/admin", labelKey: "nav.admin", icon: "admin", roles: ["ADMIN", "DIRECTOR"] },
 ];
 
+function includesQuery(query, fields) {
+  const normalizedQuery = query.trim().toLowerCase();
+  return fields
+    .filter(Boolean)
+    .some((field) => String(field).toLowerCase().includes(normalizedQuery));
+}
+
 export function AppShell() {
   const { user, logout } = useAuth();
   const { language, t } = useLanguage();
@@ -101,6 +108,10 @@ export function AppShell() {
     unreadMessages: 0,
     unreadNotifications: 0,
   });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -156,12 +167,147 @@ export function AppShell() {
     language === "ru"
       ? {
           search: "Поиск документов, заявлений и сообщений",
+          searchLoading: "Поиск...",
+          searchEmpty: "Ничего не найдено",
           notifications: "Уведомления",
+          messages: "Сообщение",
+          requests: "Заявление",
+          documents: "Документ",
+          users: "Пользователь",
         }
       : {
           search: "Документ, арыз жана билдирүү издөө",
+          searchLoading: "Изделүүдө...",
+          searchEmpty: "Эч нерсе табылган жок",
           notifications: "Билдирүүлөр",
+          messages: "Кабар",
+          requests: "Арыз",
+          documents: "Документ",
+          users: "Колдонуучу",
         };
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    let isCancelled = false;
+
+    if (query.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearching(true);
+
+      const canSearchUsers = ["ADMIN", "DIRECTOR", "HR"].includes(user.roleCode);
+      const requests = [
+        api.get("/api/messages"),
+        api.get("/api/requests"),
+        api.get("/api/documents"),
+      ];
+
+      if (canSearchUsers) {
+        requests.push(api.get("/api/users"));
+      }
+
+      const [messagesData, requestsData, documentsData, usersData] = await Promise.allSettled(requests);
+
+      if (isCancelled) {
+        return;
+      }
+
+      const messages =
+        messagesData.status === "fulfilled"
+          ? messagesData.value.messages
+              .filter((item) =>
+                includesQuery(query, [item.subject, item.text, item.senderName, item.receiverName])
+              )
+              .map((item) => ({
+                id: `message-${item.id}`,
+                type: shellLabels.messages,
+                title: item.subject || shellLabels.messages,
+                text: item.text,
+                to: "/messages",
+              }))
+          : [];
+
+      const foundRequests =
+        requestsData.status === "fulfilled"
+          ? requestsData.value.requests
+              .filter((item) =>
+                includesQuery(query, [
+                  item.documentTitle,
+                  item.type,
+                  item.reason,
+                  item.comment,
+                  item.status,
+                  item.authorName,
+                ])
+              )
+              .map((item) => ({
+                id: `request-${item.id}`,
+                type: shellLabels.requests,
+                title: item.documentTitle || item.type,
+                text: item.reason || item.status,
+                to: "/requests",
+              }))
+          : [];
+
+      const documents =
+        documentsData.status === "fulfilled"
+          ? documentsData.value.documents
+              .filter((item) =>
+                includesQuery(query, [item.title, item.category, item.description, item.fileName])
+              )
+              .map((item) => ({
+                id: `document-${item.id}`,
+                type: shellLabels.documents,
+                title: item.title || item.fileName,
+                text: item.description || item.category,
+                to: "/documents",
+              }))
+          : [];
+
+      const foundUsers =
+        usersData?.status === "fulfilled"
+          ? usersData.value.users
+              .filter((item) =>
+                includesQuery(query, [
+                  item.fullName,
+                  item.username,
+                  item.email,
+                  item.phone,
+                  item.position,
+                  item.roleTitle,
+                  item.departmentTitle,
+                ])
+              )
+              .map((item) => ({
+                id: `user-${item.id}`,
+                type: shellLabels.users,
+                title: item.fullName,
+                text: item.username || item.email,
+                to: "/users",
+              }))
+          : [];
+
+      setSearchResults([...messages, ...foundRequests, ...documents, ...foundUsers].slice(0, 10));
+      setIsSearching(false);
+    }, 250);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [language, searchQuery, shellLabels.documents, shellLabels.messages, shellLabels.requests, shellLabels.users, user.roleCode]);
+
+  function closeSearch() {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  }
 
   return (
     <div className="app-shell">
@@ -215,7 +361,38 @@ export function AppShell() {
             <h2>{displayRoleTitle}</h2>
           </div>
           <div className="topbar__search">
-            <input aria-label={shellLabels.search} placeholder={shellLabels.search} />
+            <input
+              aria-label={shellLabels.search}
+              placeholder={shellLabels.search}
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setIsSearchOpen(true);
+              }}
+              onFocus={() => setIsSearchOpen(true)}
+            />
+            {isSearchOpen && searchQuery.trim().length >= 2 ? (
+              <div className="search-popover">
+                {isSearching ? <p className="search-popover__state">{shellLabels.searchLoading}</p> : null}
+                {!isSearching && searchResults.length === 0 ? (
+                  <p className="search-popover__state">{shellLabels.searchEmpty}</p>
+                ) : null}
+                {!isSearching
+                  ? searchResults.map((item) => (
+                      <Link
+                        className="search-result"
+                        key={item.id}
+                        to={item.to}
+                        onClick={closeSearch}
+                      >
+                        <span>{item.type}</span>
+                        <strong>{item.title}</strong>
+                        <p>{item.text}</p>
+                      </Link>
+                    ))
+                  : null}
+              </div>
+            ) : null}
           </div>
           <div className="topbar__actions">
             <span className="topbar__chip">
