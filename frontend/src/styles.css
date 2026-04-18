@@ -879,6 +879,90 @@ textarea:disabled {
   color: var(--blue-strong);
 }
 
+.ux-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  gap: 18px;
+}
+
+.ux-card {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.ux-card--primary {
+  background:
+    radial-gradient(circle at 92% 12%, rgba(47, 128, 237, 0.16), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #edf6ff 100%);
+}
+
+.ux-card p {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.ux-actions,
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 9px 12px;
+  border-radius: 999px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 850;
+  background: var(--blue-soft);
+  border: 1px solid #cfe1f8;
+}
+
+.status-pill::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill--neutral {
+  color: #64748b;
+  background: #f1f5f9;
+  border-color: #dbe3ee;
+}
+
+.status-pill--warning {
+  color: #b45309;
+  background: var(--orange-soft);
+  border-color: #fde0a5;
+}
+
+.status-pill--success {
+  color: #15803d;
+  background: var(--green-soft);
+  border-color: #bde8c9;
+}
+
+.status-pill--danger {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: #fecdd3;
+}
+
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1500,6 +1584,7 @@ textarea:disabled {
   .app-shell,
   .panel-grid,
   .stat-grid,
+  .ux-grid,
   .detail-grid,
   .admin-user-card__form {
     grid-template-columns: 1fr;
@@ -1604,6 +1689,7 @@ textarea:disabled {
   .topbar,
   .hero-panel,
   .panel,
+  .ux-card,
   .logo-stage {
     padding: 18px;
   }
@@ -1673,6 +1759,7 @@ textarea:disabled {
   }
 
   .auth-hero__actions,
+  .ux-actions,
   .inline-actions,
   .request-row__actions {
     width: 100%;
@@ -1680,6 +1767,8 @@ textarea:disabled {
 
   .auth-hero__actions .primary-button,
   .auth-hero__actions .ghost-button,
+  .ux-actions .primary-button,
+  .ux-actions .ghost-button,
   .inline-actions .primary-button,
   .inline-actions .ghost-button,
   .inline-actions .danger-button,
@@ -1910,6 +1999,7 @@ textarea:disabled {
   .topbar,
   .hero-panel,
   .panel,
+  .ux-card,
   .logo-stage {
     padding: 14px;
   }
