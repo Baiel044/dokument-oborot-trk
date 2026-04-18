@@ -10,6 +10,26 @@ const { generateLetterheadDocumentPdf } = require("../utils/letterheadDocumentPd
 
 const router = express.Router();
 const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
+const ASSIGNMENT_TYPES = ["execution", "review"];
+
+function decorateDocument(document, users) {
+  const uploader = users.find((user) => user.id === document.uploadedBy);
+  return {
+    ...document,
+    uploadedByName: uploader?.fullName || "Белгисиз",
+    assignments: Array.isArray(document.assignments)
+      ? document.assignments.map((assignment) => {
+          const recipient = users.find((user) => user.id === assignment.recipientId);
+          const sender = users.find((user) => user.id === assignment.senderId);
+          return {
+            ...assignment,
+            recipientName: recipient?.fullName || "Белгисиз",
+            senderName: sender?.fullName || "Белгисиз",
+          };
+        })
+      : [],
+  };
+}
 
 function buildSafeFileName(originalName) {
   const extension = path.extname(originalName).toLowerCase();
@@ -50,7 +70,9 @@ const upload = multer({
 
 router.get("/", authenticate, (_req, res) => {
   const db = readDb();
-  const documents = [...db.documents].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const documents = [...db.documents]
+    .map((document) => decorateDocument(document, db.users))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json({ documents });
 });
 
@@ -158,7 +180,71 @@ router.get("/:id", authenticate, (req, res) => {
     return res.status(404).json({ message: "Документ табылган жок." });
   }
 
-  res.json({ document });
+  res.json({ document: decorateDocument(document, db.users) });
+});
+
+router.post("/:id/assign", authenticate, (req, res) => {
+  if (!["DIRECTOR", "ADMIN"].includes(req.user.roleCode)) {
+    return res.status(403).json({ message: "Документти жөнөтүү директорго гана жеткиликтүү." });
+  }
+
+  const db = readDb();
+  const document = db.documents.find((item) => item.id === req.params.id);
+  if (!document) {
+    return res.status(404).json({ message: "Документ табылган жок." });
+  }
+
+  const recipientId = String(req.body.recipientId || "").trim();
+  const assignmentType = String(req.body.assignmentType || "").trim();
+  const comment = String(req.body.comment || "").trim();
+
+  if (!recipientId) {
+    return res.status(400).json({ message: "Алуучуну тандаңыз." });
+  }
+
+  if (!ASSIGNMENT_TYPES.includes(assignmentType)) {
+    return res.status(400).json({ message: "Жөнөтүү түрүн тандаңыз." });
+  }
+
+  const recipient = db.users.find((user) => user.id === recipientId && user.status === "active");
+  if (!recipient) {
+    return res.status(404).json({ message: "Алуучу табылган жок." });
+  }
+
+  const createdAt = new Date().toISOString();
+  const assignment = {
+    id: createId("assignment"),
+    senderId: req.user.id,
+    recipientId,
+    assignmentType,
+    comment,
+    status: "sent",
+    createdAt,
+  };
+
+  document.assignments = Array.isArray(document.assignments) ? document.assignments : [];
+  document.assignments.unshift(assignment);
+  document.updatedAt = createdAt;
+
+  const assignmentTitle = assignmentType === "execution" ? "Документ к исполнению" : "Документ для ознакомления";
+  db.notifications.unshift({
+    id: createId("notif"),
+    userId: recipientId,
+    title: assignmentTitle,
+    text: `${req.user.fullName} направил(а) документ: ${document.title}`,
+    isRead: false,
+    createdAt,
+  });
+
+  writeDb(db);
+  appendAuditLog({
+    userId: req.user.id,
+    action: "Документ жөнөтүлдү",
+    entityType: "document",
+    entityId: document.id,
+  });
+
+  res.status(201).json({ document: decorateDocument(document, db.users) });
 });
 
 router.delete("/:id", authenticate, (req, res) => {
