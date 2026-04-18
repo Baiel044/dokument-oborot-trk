@@ -757,24 +757,28 @@ textarea:disabled {
   content: "";
   position: absolute;
   left: 16px;
-  top: 22px;
+  top: 50%;
   width: 13px;
   height: 13px;
   border: 2px solid #94a3b8;
   border-radius: 50%;
-  z-index: 1;
+  transform: translateY(-50%);
+  z-index: 2;
+  pointer-events: none;
 }
 
 .topbar__search::after {
   content: "";
   position: absolute;
   left: 28px;
-  top: 33px;
+  top: calc(50% + 7px);
   width: 7px;
   height: 2px;
   background: #94a3b8;
   transform: rotate(45deg);
   border-radius: 999px;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .search-popover {
