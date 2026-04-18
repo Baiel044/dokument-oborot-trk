@@ -1031,6 +1031,312 @@ textarea:disabled {
   font-weight: 850;
 }
 
+.admin-panel {
+  display: grid;
+  gap: 22px;
+  color: var(--text);
+}
+
+.admin-panel__title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.admin-panel__title h1 {
+  margin: 0;
+  color: var(--blue-strong);
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1;
+}
+
+.admin-panel__icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+}
+
+.admin-panel__icon::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 7px;
+  width: 10px;
+  height: 10px;
+  border: 3px solid #5948d7;
+  border-radius: 50%;
+}
+
+.admin-panel__icon::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  bottom: 1px;
+  width: 23px;
+  height: 12px;
+  border: 3px solid #5948d7;
+  border-top: 0;
+  border-radius: 0 0 18px 18px;
+}
+
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.admin-search {
+  position: relative;
+  flex: 1;
+  max-width: 560px;
+}
+
+.admin-search span::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border: 2px solid #98a2b3;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.admin-search span::after {
+  content: "";
+  position: absolute;
+  left: 30px;
+  top: calc(50% + 7px);
+  width: 8px;
+  height: 2px;
+  background: #98a2b3;
+  border-radius: 999px;
+  transform: rotate(45deg);
+  z-index: 2;
+}
+
+.admin-search input {
+  height: 44px;
+  padding-left: 44px;
+  background: #ffffff;
+}
+
+.admin-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-toolbar__actions select {
+  width: 88px;
+  height: 50px;
+  background-color: #ffffff;
+}
+
+.excel-button,
+.save-button,
+.generate-button,
+.delete-button,
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 850;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.excel-button:hover,
+.save-button:hover,
+.generate-button:hover,
+.delete-button:hover,
+.icon-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+.excel-button {
+  min-height: 50px;
+  padding: 0 26px;
+  color: #ffffff;
+  background: #22c55e;
+  box-shadow: 0 12px 22px rgba(34, 197, 94, 0.24);
+}
+
+.excel-button::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  box-shadow: inset 5px 0 0 rgba(255, 255, 255, 0.26);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.admin-table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+
+.admin-table th {
+  color: #2f2f9d;
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+  background: #dfe6ff;
+}
+
+.admin-table td {
+  background: #ffffff;
+}
+
+.admin-table tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.admin-table th:nth-child(1),
+.admin-table td:nth-child(1) {
+  width: 42px;
+  text-align: center;
+}
+
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(2) {
+  width: 270px;
+}
+
+.admin-table th:nth-child(3),
+.admin-table td:nth-child(3) {
+  width: 270px;
+}
+
+.admin-table th:nth-child(4),
+.admin-table td:nth-child(4) {
+  width: 180px;
+}
+
+.admin-table th:nth-child(5),
+.admin-table td:nth-child(5) {
+  width: 150px;
+  text-align: center;
+}
+
+.admin-table th:nth-child(6),
+.admin-table td:nth-child(6) {
+  width: 430px;
+}
+
+.admin-table th:nth-child(7),
+.admin-table td:nth-child(7) {
+  width: 140px;
+}
+
+.admin-table input,
+.admin-table select {
+  height: 38px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.admin-name-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-name-cell input {
+  color: var(--blue-strong);
+  font-weight: 900;
+}
+
+.admin-name-cell span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.teacher-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.teacher-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #ef233c;
+}
+
+.admin-password-cell {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.icon-button {
+  min-width: 54px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.admin-actions-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.save-button {
+  color: #ffffff;
+  background: #4f46e5;
+}
+
+.generate-button {
+  color: #ffffff;
+  background: #8b95a1;
+}
+
+.delete-button {
+  color: #ffffff;
+  background: #ef233c;
+}
+
+.delete-button:disabled {
+  background: #cbd5e1;
+}
+
+.admin-empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 800;
+}
+
 .admin-user-card {
   display: grid;
   gap: 18px;
