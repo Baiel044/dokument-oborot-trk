@@ -68,9 +68,17 @@ const upload = multer({
   },
 });
 
-router.get("/", authenticate, (_req, res) => {
+router.get("/", authenticate, (req, res) => {
   const db = readDb();
   const documents = [...db.documents]
+    .filter((document) => {
+      if (["ADMIN", "DIRECTOR"].includes(req.user.roleCode)) {
+        return true;
+      }
+
+      const assignments = Array.isArray(document.assignments) ? document.assignments : [];
+      return document.uploadedBy === req.user.id || assignments.some((item) => item.recipientId === req.user.id);
+    })
     .map((document) => decorateDocument(document, db.users))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json({ documents });

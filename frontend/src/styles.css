@@ -1130,6 +1130,35 @@ textarea:disabled {
   margin: 0;
 }
 
+.incoming-assignment {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.incoming-assignment:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.incoming-assignment > div {
+  display: grid;
+  gap: 8px;
+}
+
+.incoming-assignment strong {
+  color: var(--text);
+}
+
+.incoming-assignment p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .message-row__content {
   flex: 1;
 }
@@ -1885,7 +1914,8 @@ textarea:disabled {
   .request-row,
   .message-row,
   .user-row,
-  .notification-row {
+  .notification-row,
+  .incoming-assignment {
     padding: 16px;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
@@ -1897,7 +1927,12 @@ textarea:disabled {
     flex-direction: column;
   }
 
-  .document-row__main .ghost-button {
+  .incoming-assignment {
+    flex-direction: column;
+  }
+
+  .document-row__main .ghost-button,
+  .incoming-assignment .primary-button {
     width: 100%;
   }
 

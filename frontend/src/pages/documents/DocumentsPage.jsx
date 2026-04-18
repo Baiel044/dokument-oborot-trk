@@ -33,6 +33,10 @@ export function DocumentsPage() {
           assignmentHistory: "История направлений",
           assignedBy: "Направил",
           assignedTo: "Получатель",
+          incomingTitle: "Входящие поручения",
+          incomingText: "Документы, которые директор направил вам к исполнению или для ознакомления.",
+          noIncoming: "Поручений пока нет.",
+          sentAt: "Дата",
         }
       : {
           supportedFormats: "PDF, Word жана Excel файлдары колдоого алынат",
@@ -54,6 +58,10 @@ export function DocumentsPage() {
           assignmentHistory: "Жөнөтүү тарыхы",
           assignedBy: "Жөнөткөн",
           assignedTo: "Алуучу",
+          incomingTitle: "Кирген тапшырмалар",
+          incomingText: "Директор сизге аткарууга же таанышууга жөнөткөн документтер.",
+          noIncoming: "Азырынча тапшырма жок.",
+          sentAt: "Дата",
         };
 
   const [documents, setDocuments] = useState([]);
@@ -178,6 +186,15 @@ export function DocumentsPage() {
     }
   }
 
+  const incomingAssignments = documents.flatMap((document) =>
+    (document.assignments || [])
+      .filter((assignment) => assignment.recipientId === user.id)
+      .map((assignment) => ({
+        ...assignment,
+        document,
+      }))
+  );
+
   return (
     <div className="page-stack">
       <form className="panel" onSubmit={handleSubmit}>
@@ -227,6 +244,48 @@ export function DocumentsPage() {
           </button>
         </div>
       </form>
+
+      {!canAssignDocuments ? (
+        <section className="panel">
+          <div className="panel__header">
+            <div>
+              <h3>{labels.incomingTitle}</h3>
+              <p className="muted-text">{labels.incomingText}</p>
+            </div>
+            <span className="panel-counter">{incomingAssignments.length}</span>
+          </div>
+
+          {incomingAssignments.length ? (
+            incomingAssignments.map((assignment) => (
+              <article className="incoming-assignment" key={assignment.id}>
+                <div>
+                  <span className={`tag ${assignment.assignmentType === "execution" ? "tag--orange" : ""}`}>
+                    {assignment.assignmentType === "execution" ? labels.execution : labels.review}
+                  </span>
+                  <strong>{assignment.document.title}</strong>
+                  <p>
+                    {labels.assignedBy}: {assignment.senderName} · {labels.sentAt}:{" "}
+                    {new Date(assignment.createdAt).toLocaleString(language === "ru" ? "ru-RU" : "ky-KG")}
+                  </p>
+                  {assignment.comment ? <p>{assignment.comment}</p> : null}
+                </div>
+                {assignment.document.filePath ? (
+                  <a
+                    className="primary-button"
+                    href={assignment.document.filePath}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("documents.openFile")}
+                  </a>
+                ) : null}
+              </article>
+            ))
+          ) : (
+            <p className="muted-text">{labels.noIncoming}</p>
+          )}
+        </section>
+      ) : null}
 
       <section className="panel">
         <div className="panel__header">
