@@ -1,8 +1,28 @@
 const express = require("express");
+const { authenticate } = require("../middleware/auth");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { hashPassword, comparePassword, signToken, sanitizeUser } = require("../utils/auth");
+const { DEPARTMENTS, ROLES } = require("../utils/catalogs");
 
 const router = express.Router();
+
+function auditFailedLogin({ req, identifier, user, reason }) {
+  appendAuditLog({
+    userId: user?.id || "anonymous",
+    action: "Неуспешная попытка входа",
+    entityType: "auth",
+    entityId: user?.id || identifier || "anonymous",
+    req,
+    metadata: {
+      identifier: identifier || "",
+      reason,
+    },
+  });
+}
+
+router.get("/me", authenticate, (req, res) => {
+  res.json({ user: sanitizeUser(req.user) });
+});
 
 router.post("/register", async (req, res) => {
   const {
@@ -35,9 +55,39 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ message: "Сырсөздөр дал келбейт." });
   }
 
+  if (String(password).length < 6) {
+    return res.status(400).json({ message: "Сырсөз кеминде 6 белгиден турушу керек." });
+  }
+
+  const normalizedRoleCode = String(roleCode || "").trim();
+  const normalizedDepartmentId = String(departmentId || "").trim();
+  const allowedSelfRegistrationRoles = ROLES.map((role) => role.code).filter(
+    (code) => !["ADMIN", "DIRECTOR"].includes(code)
+  );
+
+  if (!allowedSelfRegistrationRoles.includes(normalizedRoleCode)) {
+    return res.status(400).json({ message: "Катталуу үчүн кызматкердин туура ролун тандаңыз." });
+  }
+
+  if (!DEPARTMENTS.some((department) => department.id === normalizedDepartmentId)) {
+    return res.status(400).json({ message: "Туура бөлүмдү тандаңыз." });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const normalizedUsername = String(username).trim();
+  const normalizedFullName = String(fullName).trim();
+  const normalizedPhone = String(phone).trim();
+  const normalizedPosition = String(position).trim();
+
+  if (!normalizedFullName || !normalizedEmail || !normalizedPhone || !normalizedPosition || !normalizedUsername) {
+    return res.status(400).json({ message: "Бардык милдеттүү талааларды толтуруңуз." });
+  }
+
   const db = readDb();
   const duplicateUser = db.users.find(
-    (user) => user.username.toLowerCase() === username.toLowerCase() || user.email.toLowerCase() === email.toLowerCase()
+    (user) =>
+      user.username.toLowerCase() === normalizedUsername.toLowerCase() ||
+      user.email.toLowerCase() === normalizedEmail
   );
 
   if (duplicateUser) {
@@ -47,13 +97,13 @@ router.post("/register", async (req, res) => {
   const createdAt = new Date().toISOString();
   const user = {
     id: createId("user"),
-    fullName,
-    email,
-    phone,
-    position,
-    departmentId,
-    roleCode,
-    username,
+    fullName: normalizedFullName,
+    email: normalizedEmail,
+    phone: normalizedPhone,
+    position: normalizedPosition,
+    departmentId: normalizedDepartmentId,
+    roleCode: normalizedRoleCode,
+    username: normalizedUsername,
     passwordHash: await hashPassword(password),
     status: "pending",
     createdAt,
@@ -68,6 +118,7 @@ router.post("/register", async (req, res) => {
       userId: item.id,
       title: "Жаңы катталуу",
       text: `${fullName} аккаунт ырастоону күтүп жатат.`,
+      targetPath: "/admin",
       isRead: false,
       createdAt,
     });
@@ -79,6 +130,7 @@ router.post("/register", async (req, res) => {
     action: "Катталуу арызы түзүлдү",
     entityType: "user",
     entityId: user.id,
+    req,
   });
 
   return res.status(201).json({
@@ -92,6 +144,11 @@ router.post("/login", async (req, res) => {
   const identifier = String(username || "").trim().toLowerCase();
 
   if (!identifier || !password) {
+    auditFailedLogin({
+      req,
+      identifier,
+      reason: "missing_credentials",
+    });
     return res.status(400).json({ message: "Логин/email жана сырсөздү жазыңыз." });
   }
 
@@ -101,15 +158,32 @@ router.post("/login", async (req, res) => {
   );
 
   if (!user) {
+    auditFailedLogin({
+      req,
+      identifier,
+      reason: "user_not_found",
+    });
     return res.status(401).json({ message: "Логин же сырсөз туура эмес." });
   }
 
   if (user.status !== "active") {
+    auditFailedLogin({
+      req,
+      identifier,
+      user,
+      reason: `status_${user.status}`,
+    });
     return res.status(403).json({ message: "Аккаунт али ырастала элек же бөгөттөлгөн." });
   }
 
   const isValid = await comparePassword(password, user.passwordHash);
   if (!isValid) {
+    auditFailedLogin({
+      req,
+      identifier,
+      user,
+      reason: "invalid_password",
+    });
     return res.status(401).json({ message: "Логин же сырсөз туура эмес." });
   }
 
@@ -118,6 +192,7 @@ router.post("/login", async (req, res) => {
     action: "Тутумга кирди",
     entityType: "auth",
     entityId: user.id,
+    req,
   });
 
   return res.json({
@@ -126,7 +201,15 @@ router.post("/login", async (req, res) => {
   });
 });
 
-router.post("/logout", (_req, res) => {
+router.post("/logout", authenticate, (req, res) => {
+  appendAuditLog({
+    userId: req.user.id,
+    action: "Тутумдан чыкты",
+    entityType: "auth",
+    entityId: req.user.id,
+    req,
+  });
+
   res.json({ message: "Сеанс аяктады." });
 });
 
@@ -141,6 +224,7 @@ router.post("/forgot-password", (req, res) => {
       userId: "user-admin",
       title: "Сырсөздү калыбына келтирүү өтүнүчү",
       text: `${user.fullName} сырсөздү калыбына келтирүүнү сурады.`,
+      targetPath: "/admin",
       isRead: false,
       createdAt: new Date().toISOString(),
     });
@@ -150,6 +234,7 @@ router.post("/forgot-password", (req, res) => {
       action: "Сырсөздү калыбына келтирүү суралды",
       entityType: "auth",
       entityId: user.id,
+      req,
     });
   }
 

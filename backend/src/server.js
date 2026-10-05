@@ -1,6 +1,13 @@
+const http = require("http");
 const app = require("./app");
-const { PORT } = require("./utils/config");
+const { attachMessagesWebSocket } = require("./realtime/messagesSocket");
+const { HOST, PORT } = require("./utils/config");
 
-app.listen(PORT, () => {
-  console.log(`Server started on http://localhost:${PORT}`);
+const server = http.createServer(app);
+
+attachMessagesWebSocket(server);
+
+server.listen(PORT, HOST, () => {
+  console.log(`Server started on http://${HOST}:${PORT}`);
+  console.log(`Local access: http://localhost:${PORT}`);
 });

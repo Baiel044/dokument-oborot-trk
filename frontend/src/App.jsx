@@ -39,7 +39,7 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={["ADMIN", "DIRECTOR", "HR", "ACCOUNTANT"]} />}>
+      <Route element={<ProtectedRoute roles={["ADMIN", "DIRECTOR", "ACADEMIC_OFFICE", "HR", "ACCOUNTANT"]} />}>
         <Route element={<AppShell />}>
           <Route path="/reports" element={<ReportsPage />} />
         </Route>

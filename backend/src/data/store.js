@@ -3,6 +3,7 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const { DATA_FILE, UPLOAD_DIR } = require("../utils/config");
+const { publishNotifications } = require("../realtime/notificationsHub");
 
 const now = new Date().toISOString();
 
@@ -179,16 +180,43 @@ function readDb() {
   return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 }
 
+function getExistingNotificationIds() {
+  if (!fs.existsSync(DATA_FILE)) {
+    return new Set();
+  }
+
+  try {
+    const currentData = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    return new Set((currentData.notifications || []).map((notification) => notification.id));
+  } catch (_error) {
+    return new Set();
+  }
+}
+
 function writeDb(data) {
   ensureStorage();
+  const existingNotificationIds = getExistingNotificationIds();
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
+  const newNotifications = (data.notifications || []).filter(
+    (notification) => !existingNotificationIds.has(notification.id)
+  );
+  if (newNotifications.length) {
+    publishNotifications(newNotifications);
+  }
 }
 
 function createId(prefix) {
   return `${prefix}-${uuidv4()}`;
 }
 
-function appendAuditLog({ userId, action, entityType, entityId }) {
+function getRequestIp(req) {
+  const forwardedFor = req?.headers?.["x-forwarded-for"];
+  return String(Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor || req?.ip || "")
+    .split(",")[0]
+    .trim();
+}
+
+function appendAuditLog({ userId, action, entityType, entityId, req, metadata }) {
   const db = readDb();
   db.auditLogs.unshift({
     id: createId("audit"),
@@ -196,6 +224,9 @@ function appendAuditLog({ userId, action, entityType, entityId }) {
     action,
     entityType,
     entityId,
+    ipAddress: req ? getRequestIp(req) : "",
+    userAgent: req?.headers?.["user-agent"] || "",
+    metadata: metadata || null,
     createdAt: new Date().toISOString(),
   });
   writeDb(db);

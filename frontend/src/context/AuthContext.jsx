@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { api } from "../services/api";
+import { AUTH_UNAUTHORIZED_EVENT, api } from "../services/api";
 
 const AuthContext = createContext(null);
 
@@ -8,10 +8,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    function handleUnauthorized() {
+      localStorage.removeItem("eduflow-token");
+      setUser(null);
+      setLoading(false);
+    }
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+
     const token = localStorage.getItem("eduflow-token");
     if (!token) {
       setLoading(false);
-      return;
+      return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
     }
 
     api
@@ -22,6 +30,8 @@ export function AuthProvider({ children }) {
         setUser(null);
       })
       .finally(() => setLoading(false));
+
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
   }, []);
 
   async function login(credentials) {
@@ -35,7 +45,13 @@ export function AuthProvider({ children }) {
     return api.post("/api/auth/register", payload);
   }
 
-  function logout() {
+  async function logout() {
+    try {
+      await api.post("/api/auth/logout", {});
+    } catch (_error) {
+      // Local logout must still work if the session is already invalid or the server is unavailable.
+    }
+
     localStorage.removeItem("eduflow-token");
     setUser(null);
   }

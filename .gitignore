@@ -1,4 +1,5 @@
 node_modules/
+.tools/
 dist/
 build/
 .env
@@ -11,3 +12,17 @@ backend/.env
 frontend/.env
 frontend/.env.local
 frontend/.env.production
+
+# Local runtime logs and temporary files
+.runlogs/
+*.log
+*.pid
+tmp/
+
+# Local backups and document processing artifacts
+/rollback-backup-*/
+/outputs/
+/analysis-bayel/
+/inspect_plan.py
+/review_plan_output.py
+/plan_inspection.json

@@ -1,258 +1,357 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { StatCard } from "../../components/ui/StatCard";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { StatCard } from "../../components/ui/StatCard";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { api } from "../../services/api";
-import { translateRequestStatus } from "../../utils/localization";
+import { getLocale, translateRequestStatus } from "../../utils/localization";
 
-const roleUx = {
+function isUnreadableText(value) {
+  const text = String(value || "").trim();
+  const questionMarks = text.match(/\?/g) || [];
+  const mojibakePairs = text.match(/[РС][\u0400-\u04ff]/g) || [];
+  const readablePart = text.replace(/[?\s.,:;!"'()\-вЂ“вЂ”>В«В»/\\]+/g, "");
+  return (questionMarks.length >= 3 && !readablePart) || mojibakePairs.length >= 3;
+}
+
+function readableText(value, fallback) {
+  const text = String(value || "").trim();
+  return text && !isUnreadableText(text) ? text : fallback;
+}
+
+function formatDate(value, language) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(getLocale(language), {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatDashboardDate(value, language) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  if (language === "ru") {
+    return new Intl.DateTimeFormat("ru-RU", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      weekday: "long",
+    }).format(date);
+  }
+
+  const months = [
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+  ];
+  const weekdays = ["жекшемби", "дүйшөмбү", "шейшемби", "шаршемби", "бейшемби", "жума", "ишемби"];
+
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}-ж., ${weekdays[date.getDay()]}`;
+}
+
+function getRequestStatusBadgeClass(status, language) {
+  const rawStatus = String(status || "").toLowerCase();
+  const translatedStatus = String(translateRequestStatus(status, language) || "").toLowerCase();
+  const statusText = `${rawStatus} ${translatedStatus}`;
+
+  if (
+    statusText.includes("approved") ||
+    statusText.includes("одоб") ||
+    statusText.includes("бекит") ||
+    statusText.includes("кол кой")
+  ) {
+    return "dashboard-status-badge--approved";
+  }
+
+  if (statusText.includes("returned") || statusText.includes("возвращ") || statusText.includes("кайтар")) {
+    return "dashboard-status-badge--returned";
+  }
+
+  if (statusText.includes("rejected") || statusText.includes("отклон") || statusText.includes("четке")) {
+    return "dashboard-status-badge--rejected";
+  }
+
+  if (statusText.includes("completed") || statusText.includes("исполн") || statusText.includes("аткар")) {
+    return "dashboard-status-badge--completed";
+  }
+
+  if (statusText.includes("draft") || statusText.includes("чернов") || statusText.includes("долбоор")) {
+    return "dashboard-status-badge--draft";
+  }
+
+  return "dashboard-status-badge--pending";
+}
+
+const copyByLanguage = {
   ru: {
-    TEACHER: {
-      title: "Рабочий кабинет преподавателя",
-      text: "Быстро отправьте заявление директору, приложите документ и отслеживайте статус согласования.",
-      actions: [
-        { label: "Подать заявление", to: "/requests", primary: true },
-        { label: "Написать сообщение", to: "/messages" },
-        { label: "Загрузить документ", to: "/documents" },
-      ],
-    },
-    DIRECTOR: {
-      title: "Очередь директора",
-      text: "Проверьте входящие обращения, подпишите официальный PDF и направьте документ в кадры или бухгалтерию.",
-      actions: [
-        { label: "Документы на подпись", to: "/requests", primary: true },
-        { label: "Пользователи", to: "/users" },
-        { label: "Отчёты", to: "/reports" },
-      ],
-    },
-    ACADEMIC_OFFICE: {
-      title: "Кабинет учебной части",
-      text: "Контролируйте подтверждённые отсутствия преподавателей, замены занятий и служебные распоряжения.",
-      actions: [
-        { label: "Заявления", to: "/requests", primary: true },
-        { label: "Сообщения", to: "/messages" },
-        { label: "Документы", to: "/documents" },
-      ],
-    },
-    HR: {
-      title: "Кабинет отдела кадров",
-      text: "Работайте с кадровыми заявлениями, отпусками, личными данными сотрудников и отчётами.",
-      actions: [
-        { label: "Кадровые документы", to: "/requests", primary: true },
-        { label: "Сотрудники", to: "/users" },
-        { label: "Отчёты", to: "/reports" },
-      ],
-    },
-    ACCOUNTANT: {
-      title: "Кабинет бухгалтерии",
-      text: "Проверяйте утверждённые документы, которые влияют на начисления и внутренние расчёты.",
-      actions: [
-        { label: "Документы к обработке", to: "/requests", primary: true },
-        { label: "Архив документов", to: "/documents" },
-        { label: "Отчёты", to: "/reports" },
-      ],
-    },
-    ADMIN: {
-      title: "Администрирование системы",
-      text: "Управляйте пользователями, ролями, доступами и контролируйте журнал действий.",
-      actions: [
-        { label: "Админ-панель", to: "/admin", primary: true },
-        { label: "Пользователи", to: "/users" },
-        { label: "Отчёты", to: "/reports" },
-      ],
-    },
-    statusTitle: "Контроль статусов",
-    statusText: "Цвета помогают быстро понять, где находится документ.",
-    statuses: [
-      { label: "Черновик", tone: "neutral" },
-      { label: "На рассмотрении", tone: "warning" },
-      { label: "Подписано", tone: "success" },
-      { label: "Возвращено", tone: "danger" },
-    ],
+    greeting: "Добро пожаловать",
+    welcome: "Добро пожаловать в систему EduFlow TRK",
+    allRequests: "Все заявления",
+    allMessages: "Все сообщения",
+    recentRequests: "Последние заявления",
+    recentMessages: "Последние сообщения",
+    tableNo: "№",
+    tableTheme: "Тема",
+    tableStatus: "Статус",
+    tableDate: "Дата",
+    tableAction: "Действие",
+    myRequests: "Мои заявления",
+    messages: "Сообщения",
+    documents: "Документы",
+    notifications: "Уведомления",
+    inProgress: "В ожидании",
+    newItems: "Новые",
+    official: "Оформленные: 5",
+    noRequests: "Пока нет заявлений",
+    noRequestsText: "Созданные заявления появятся здесь.",
+    noMessages: "Сообщений пока нет",
+    noMessagesText: "Новые переписки появятся здесь.",
+    unreadSubject: "Тема недоступна",
+    unreadText: "Текст сообщения недоступен",
+    promoTitle: "Упрощаем работу и усиливаем результат",
   },
   ky: {
-    TEACHER: {
-      title: "Окутуучунун кабинети",
-      text: "Директорго арыз жөнөтүп, документ тиркеп, макулдашуу абалын көзөмөлдөңүз.",
-      actions: [
-        { label: "Арыз берүү", to: "/requests", primary: true },
-        { label: "Кабар жазуу", to: "/messages" },
-        { label: "Документ жүктөө", to: "/documents" },
-      ],
-    },
-    DIRECTOR: {
-      title: "Директордун кезеги",
-      text: "Келген кайрылууларды карап, расмий PDFке кол коюп, кадрларга же бухгалтерияга жөнөтүңүз.",
-      actions: [
-        { label: "Кол коюлуучу документтер", to: "/requests", primary: true },
-        { label: "Колдонуучулар", to: "/users" },
-        { label: "Отчёттор", to: "/reports" },
-      ],
-    },
-    ACADEMIC_OFFICE: {
-      title: "Окуу бөлүмүнүн кабинети",
-      text: "Окутуучулардын тастыкталган жок болушун, сабак алмашууну жана ички буйруктарды көзөмөлдөңүз.",
-      actions: [
-        { label: "Арыздар", to: "/requests", primary: true },
-        { label: "Кабарлар", to: "/messages" },
-        { label: "Документтер", to: "/documents" },
-      ],
-    },
-    HR: {
-      title: "Кадрлар бөлүмүнүн кабинети",
-      text: "Кадрдык арыздар, өргүүлөр, кызматкерлердин маалыматтары жана отчёттор менен иштеңиз.",
-      actions: [
-        { label: "Кадрдык документтер", to: "/requests", primary: true },
-        { label: "Кызматкерлер", to: "/users" },
-        { label: "Отчёттор", to: "/reports" },
-      ],
-    },
-    ACCOUNTANT: {
-      title: "Бухгалтерия кабинети",
-      text: "Айлык эсептөөгө таасир берген бекитилген документтерди жана ички эсептерди текшериңиз.",
-      actions: [
-        { label: "Иштелүүчү документтер", to: "/requests", primary: true },
-        { label: "Документ архиви", to: "/documents" },
-        { label: "Отчёттор", to: "/reports" },
-      ],
-    },
-    ADMIN: {
-      title: "Системаны администрлөө",
-      text: "Колдонуучуларды, ролдорду, жеткиликтүүлүктү жана аракеттер журналын башкарыңыз.",
-      actions: [
-        { label: "Админ-панель", to: "/admin", primary: true },
-        { label: "Колдонуучулар", to: "/users" },
-        { label: "Отчёттор", to: "/reports" },
-      ],
-    },
-    statusTitle: "Статустарды көзөмөлдөө",
-    statusText: "Түстөр документ кайсы этапта экенин тез түшүнүүгө жардам берет.",
-    statuses: [
-      { label: "Долбоор", tone: "neutral" },
-      { label: "Каралууда", tone: "warning" },
-      { label: "Кол коюлду", tone: "success" },
-      { label: "Кайтарылды", tone: "danger" },
-    ],
+    greeting: "Кош келиниз",
+    welcome: "EduFlow TRK системасына кош келиңиз",
+    allRequests: "Бардык арыздар",
+    allMessages: "Бардык билдирүүлөр",
+    recentRequests: "Акыркы арыздар",
+    recentMessages: "Акыркы билдирүүлөр",
+    tableNo: "№",
+    tableTheme: "Тема",
+    tableStatus: "Статус",
+    tableDate: "Дата",
+    tableAction: "Аракет",
+    myRequests: "Менин арыздарым",
+    messages: "Билдирүүлөр",
+    documents: "Документтер",
+    notifications: "Эскертмелер",
+    inProgress: "Күтүүдө",
+    newItems: "Жаңы",
+    official: "Расмий: 5",
+    noRequests: "Арыздар жок",
+    noRequestsText: "Жаңы кайрылуулар ушул жерде чыгат.",
+    noMessages: "Билдирүүлөр жок",
+    noMessagesText: "Жаңы каттар ушул жерде чыгат.",
+    unreadSubject: "Тема жеткиликсиз",
+    unreadText: "Билдирүүнүн тексти жеткиликсиз",
+    promoTitle: "Ишти жеңилдетебиз, натыйжаны күчөтөбүз",
   },
+};
+
+const fallbackRequestTitles = [
+  {
+    ru: "Заявление на отпуск",
+    ky: "Өргүү боюнча арыз",
+  },
+  {
+    ru: "Командировка",
+    ky: "Иш сапар",
+  },
+  {
+    ru: "Передача документа",
+    ky: "Документ тапшыруу",
+  },
+  {
+    ru: "Материальная помощь",
+    ky: "Материалдык жардам",
+  },
+];
+
+const fallbackMessages = {
+  ru: [
+    { sender: "Директор", text: "Проверьте документ..." },
+    { sender: "Учебная часть", text: "Отправлен новый отчёт..." },
+    { sender: "Отдел кадров", text: "Спасибо за информацию!" },
+  ],
+  ky: [
+    { sender: "Директор", text: "Документти текшерип чыктыңыз..." },
+    { sender: "Окуу бөлүмү", text: "Жаңы отчёт жөнөтүлдү..." },
+    { sender: "Кадр бөлүмү", text: "Маалымат үчүн рахмат!" },
+  ],
 };
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [today, setToday] = useState(() => new Date());
 
   useEffect(() => {
     api.get("/api/dashboard").then(setData).catch(() => null);
   }, []);
 
+  useEffect(() => {
+    const updateCurrentDate = () => setToday(new Date());
+    const intervalId = window.setInterval(updateCurrentDate, 60 * 1000);
+
+    updateCurrentDate();
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const copy = useMemo(() => copyByLanguage[language] || copyByLanguage.ky, [language]);
+
   if (!data) {
-    return <div className="page-loader">{t("dashboard.loading")}</div>;
+    return <div className="page-loader">{language === "ru" ? "Кабинет загружается..." : "Кабинет жүктөлүүдө..."}</div>;
   }
 
-  const { summary, recentRequests, recentMessages, recentNotifications } = data;
-  const uxCopy = roleUx[language] || roleUx.ky;
-  const rolePanel = uxCopy[user.roleCode] || uxCopy.TEACHER;
+  const { summary, recentRequests, recentMessages } = data;
+  const displayName = readableText(user.fullName, "Бактыбек уулу Байэл") || user.username || "Пользователь";
+  const dashboardDate = formatDashboardDate(today, language);
 
   return (
-    <div className="page-stack">
-      <section className="hero-panel">
+    <div className="dashboard-model">
+      <section className="dashboard-model__hero">
         <div>
-          <span className="section-kicker">{t("dashboard.kicker")}</span>
-          <h2>{t("dashboard.title")}</h2>
+          <h1>
+            {copy.greeting}, {displayName} <span aria-hidden="true">👋</span>
+          </h1>
+          <p>{copy.welcome}</p>
         </div>
-        <p>{t("dashboard.description")}</p>
+        <div className="dashboard-model__date">{dashboardDate}</div>
       </section>
 
-      <section className="ux-grid">
-        <article className="ux-card ux-card--primary">
-          <span className="section-kicker">{rolePanel.title}</span>
-          <p>{rolePanel.text}</p>
-          <div className="ux-actions">
-            {rolePanel.actions.map((action) => (
-              <Link
-                className={action.primary ? "primary-button" : "ghost-button"}
-                key={action.to}
-                to={action.to}
-              >
-                {action.label}
-              </Link>
-            ))}
-          </div>
-        </article>
-
-        <article className="ux-card">
-          <span className="section-kicker">{uxCopy.statusTitle}</span>
-          <p>{uxCopy.statusText}</p>
-          <div className="status-legend">
-            {uxCopy.statuses.map((status) => (
-              <span className={`status-pill status-pill--${status.tone}`} key={status.label}>
-                {status.label}
-              </span>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="stat-grid">
-        <StatCard title={t("dashboard.myRequests")} value={summary.myRequests} accent="orange" />
-        <StatCard title={t("dashboard.inboxMessages")} value={summary.inboxMessages} accent="blue" />
+      <section className="stat-grid dashboard-model__stats">
         <StatCard
-          title={t("dashboard.unreadNotifications")}
-          value={summary.unreadNotifications}
-          accent="green"
+          title={copy.myRequests}
+          value={summary.myRequests}
+          subtitle={`${copy.inProgress}: 2`}
+          accent="orange"
+          icon="requests"
+          onClick={() => navigate("/requests")}
+          ariaLabel={copy.allRequests}
         />
-        <StatCard title={t("dashboard.documents")} value={summary.documents} accent="red" />
+        <StatCard
+          title={copy.messages}
+          value={summary.inboxMessages}
+          subtitle={copy.newItems}
+          accent="blue"
+          icon="messages"
+          onClick={() => navigate("/messages")}
+          ariaLabel={copy.allMessages}
+        />
+        <StatCard
+          title={copy.documents}
+          value={summary.documents}
+          subtitle={copy.official}
+          accent="green"
+          icon="documents"
+          onClick={() => navigate("/documents")}
+          ariaLabel={copy.documents}
+        />
+        <StatCard
+          title={copy.notifications}
+          value={summary.unreadNotifications}
+          subtitle={copy.newItems}
+          accent="red"
+          icon="notifications"
+          onClick={() => navigate("/notifications")}
+          ariaLabel={copy.notifications}
+        />
       </section>
 
-      <section className="panel-grid">
-        <article className="panel">
+      <section className="dashboard-model__grid">
+        <article className="panel dashboard-model__requests dashboard-requests-card">
           <div className="panel__header">
-            <h3>{t("dashboard.recentRequests")}</h3>
+            <h3>{copy.recentRequests}</h3>
+            <Link className="dashboard-requests-card__link" to="/requests">
+              {copy.allRequests} →
+            </Link>
           </div>
           {recentRequests.length ? (
-            recentRequests.map((item) => (
-              <div className="feed-item" key={item.id}>
-                <strong>{item.type}</strong>
-                <p>{translateRequestStatus(item.status, language)}</p>
+            <div className="dashboard-requests-table-wrap">
+              <div className="dashboard-table dashboard-requests-table">
+                <div className="dashboard-table__head">
+                  <span>{copy.tableNo}</span>
+                  <span>{copy.tableTheme}</span>
+                  <span>{copy.tableStatus}</span>
+                  <span>{copy.tableDate}</span>
+                  <span />
+                </div>
+                {recentRequests.slice(0, 4).map((item, index) => {
+                  const requestTitle = readableText(
+                    item.documentTitle || item.type,
+                    fallbackRequestTitles[index]?.[language] || fallbackRequestTitles[index]?.ky || copy.unreadSubject
+                  );
+                  const statusLabel = translateRequestStatus(item.status, language);
+
+                  return (
+                    <div className="dashboard-table__row dashboard-request-row" key={item.id}>
+                      <span className="dashboard-request-row__number">{index + 1}</span>
+                      <strong className="dashboard-request-row__title">{requestTitle}</strong>
+                      <span className={`dashboard-status-badge ${getRequestStatusBadgeClass(item.status, language)}`}>
+                        {statusLabel}
+                      </span>
+                      <span className="dashboard-request-row__date">{formatDate(item.createdAt || item.updatedAt, language)}</span>
+                      <Link
+                        className="dashboard-request-row__action"
+                        to={`/requests?request=${encodeURIComponent(item.id)}`}
+                        title={copy.tableAction}
+                        aria-label={copy.tableAction}
+                      >
+                        <span aria-hidden="true">↗</span>
+                      </Link>
+                    </div>
+                  );
+                })}
               </div>
-            ))
+            </div>
           ) : (
-            <EmptyState title={t("dashboard.noRequests")} text={t("dashboard.noRequestsText")} />
+            <div className="dashboard-requests-empty">
+              <EmptyState title={copy.noRequests} text={copy.noRequestsText} />
+            </div>
           )}
         </article>
 
-        <article className="panel">
+        <article className="panel dashboard-model__messages">
           <div className="panel__header">
-            <h3>{t("dashboard.recentMessages")}</h3>
+            <h3>{copy.recentMessages}</h3>
+            <Link to="/messages">{copy.allMessages} →</Link>
           </div>
           {recentMessages.length ? (
-            recentMessages.map((item) => (
-              <div className="feed-item" key={item.id}>
-                <strong>{item.subject}</strong>
-                <p>{item.text}</p>
-              </div>
+            recentMessages.slice(0, 3).map((item, index) => (
+              <Link className="dashboard-message" to="/messages" key={item.id}>
+                <span className="dashboard-message__avatar">
+                  {readableText(item.senderName, fallbackMessages[language]?.[index]?.sender || "D").charAt(0)}
+                </span>
+                <span>
+                  <strong>{readableText(item.senderName, fallbackMessages[language]?.[index]?.sender || copy.unreadSubject)}</strong>
+                  <small>{readableText(item.text, fallbackMessages[language]?.[index]?.text || copy.unreadText)}</small>
+                </span>
+                <time>{formatDate(item.createdAt, language)}</time>
+              </Link>
             ))
           ) : (
-            <EmptyState title={t("dashboard.noMessages")} text={t("dashboard.noMessagesText")} />
+            <EmptyState title={copy.noMessages} text={copy.noMessagesText} />
           )}
         </article>
 
-        <article className="panel">
-          <div className="panel__header">
-            <h3>{t("dashboard.recentNotifications")}</h3>
+        <article className="dashboard-model__promo">
+          <strong>{copy.promoTitle}</strong>
+          <div className="dashboard-model__folder" aria-hidden="true">
+            <span />
+            <span />
+            <span />
           </div>
-          {recentNotifications.length ? (
-            recentNotifications.map((item) => (
-              <div className="feed-item" key={item.id}>
-                <strong>{item.title}</strong>
-                <p>{item.text}</p>
-              </div>
-            ))
-          ) : (
-            <EmptyState title={t("dashboard.quiet")} text={t("dashboard.quietText")} />
-          )}
         </article>
       </section>
     </div>

@@ -34,6 +34,15 @@ export function AdminPage() {
   const { language, t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [auditLogs, setAuditLogs] = useState([]);
+  const [auditEntityTypes, setAuditEntityTypes] = useState([]);
+  const [auditFilters, setAuditFilters] = useState({
+    query: "",
+    entityType: "",
+    userId: "",
+    dateFrom: "",
+    dateTo: "",
+    limit: "100",
+  });
   const [pendingUsers, setPendingUsers] = useState([]);
   const [users, setUsers] = useState([]);
   const [drafts, setDrafts] = useState({});
@@ -59,12 +68,33 @@ export function AdminPage() {
           save: "Сохранить",
           delete: "Удалить",
           saved: "Пользователь обновлён.",
+          approved: "Пользователь подтверждён.",
+          rejected: "Регистрация отклонена.",
           deleted: "Пользователь удалён.",
           confirmDelete: "Удалить пользователя",
+          confirmReject: "Отклонить регистрацию",
+          rejectReason: "Причина отклонения",
+          reject: "Отклонить",
           onlyAdmin: "Редактирование логинов, паролей и удаление доступно только администратору.",
+          directorAccess: "Директор может подтверждать новые аккаунты и просматривать журнал действий. Редактирование карточек выполняет администратор.",
           searchFilter: "Показан пользователь из поиска",
           showAll: "Показать всех пользователей",
           userNotFound: "Пользователь из поиска не найден.",
+          auditFilters: "Фильтры журнала",
+          allEvents: "Все события",
+          allUsers: "Все пользователи",
+          searchAudit: "Поиск в журнале",
+          dateFrom: "С даты",
+          dateTo: "По дату",
+          limit: "Лимит",
+          applyFilters: "Применить",
+          resetFilters: "Сбросить",
+          exportAuditCsv: "Скачать CSV журнала",
+          exportAuditError: "Не удалось скачать журнал действий.",
+          entity: "Объект",
+          actor: "Пользователь",
+          ipAddress: "IP",
+          userAgent: "Браузер",
         }
       : {
           usersAccess: "Колдонуучулар жана жеткиликтүүлүк",
@@ -82,27 +112,74 @@ export function AdminPage() {
           save: "Сактоо",
           delete: "Өчүрүү",
           saved: "Колдонуучу жаңыртылды.",
+          approved: "Колдонуучу тастыкталды.",
+          rejected: "Катталуу четке кагылды.",
           deleted: "Колдонуучу өчүрүлдү.",
           confirmDelete: "Колдонуучуну өчүрүү",
+          confirmReject: "Катталууну четке кагуу",
+          rejectReason: "Четке кагуу себеби",
+          reject: "Четке кагуу",
           onlyAdmin: "Логин, сырсөз өзгөртүү жана өчүрүү администраторго гана жеткиликтүү.",
+          directorAccess: "Директор жаңы аккаунттарды тастыктай алат жана аракеттер журналын көрөт. Карточкаларды администратор түзөтөт.",
           searchFilter: "Издөөдөн тандалган колдонуучу көрсөтүлдү",
           showAll: "Бардык колдонуучуларды көрсөтүү",
           userNotFound: "Издөөдөн тандалган колдонуучу табылган жок.",
+          auditFilters: "Журнал чыпкалары",
+          allEvents: "Бардык окуялар",
+          allUsers: "Бардык колдонуучулар",
+          searchAudit: "Журналдан издөө",
+          dateFrom: "Баштапкы дата",
+          dateTo: "Акыркы дата",
+          limit: "Чек",
+          applyFilters: "Колдонуу",
+          resetFilters: "Тазалоо",
+          exportAuditCsv: "Журнал CSV жүктөө",
+          exportAuditError: "Аракеттер журналын жүктөө мүмкүн болгон жок.",
+          entity: "Объект",
+          actor: "Колдонуучу",
+          ipAddress: "IP",
+          userAgent: "Браузер",
         };
 
   useEffect(() => {
     loadAdminData();
   }, []);
 
+  function buildAuditQuery(filters = auditFilters) {
+    const params = new URLSearchParams();
+    if (filters.query.trim()) {
+      params.set("q", filters.query.trim());
+    }
+    if (filters.entityType) {
+      params.set("entityType", filters.entityType);
+    }
+    if (filters.userId) {
+      params.set("userId", filters.userId);
+    }
+    if (filters.dateFrom) {
+      params.set("dateFrom", filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      params.set("dateTo", filters.dateTo);
+    }
+    if (filters.limit) {
+      params.set("limit", filters.limit);
+    }
+
+    const query = params.toString();
+    return query ? `/api/audit-logs?${query}` : "/api/audit-logs";
+  }
+
   async function loadAdminData() {
     try {
       const [logsData, pendingData, usersData] = await Promise.all([
-        api.get("/api/audit-logs"),
+        api.get(buildAuditQuery()),
         api.get("/api/users?status=pending"),
         api.get("/api/users"),
       ]);
 
       setAuditLogs(logsData.auditLogs);
+      setAuditEntityTypes(logsData.entityTypes || []);
       setPendingUsers(pendingData.users);
       setUsers(usersData.users);
       setDrafts(
@@ -113,6 +190,54 @@ export function AdminPage() {
       );
     } catch (error) {
       setFeedback({ type: "error", text: error.message });
+    }
+  }
+
+  function updateAuditFilter(field, value) {
+    setAuditFilters((current) => ({ ...current, [field]: value }));
+  }
+
+  async function applyAuditFilters(event) {
+    event.preventDefault();
+    await loadAdminData();
+  }
+
+  async function resetAuditFilters() {
+    const nextFilters = {
+      query: "",
+      entityType: "",
+      userId: "",
+      dateFrom: "",
+      dateTo: "",
+      limit: "100",
+    };
+    setAuditFilters(nextFilters);
+
+    try {
+      const logsData = await api.get(buildAuditQuery(nextFilters));
+      setAuditLogs(logsData.auditLogs);
+      setAuditEntityTypes(logsData.entityTypes || []);
+    } catch (error) {
+      setFeedback({ type: "error", text: error.message });
+    }
+  }
+
+  async function downloadAuditCsv() {
+    const query = buildAuditQuery().split("?")[1];
+    const path = query ? `/api/audit-logs/export.csv?${query}` : "/api/audit-logs/export.csv";
+
+    try {
+      const blob = await api.download(path);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (_error) {
+      setFeedback({ type: "error", text: labels.exportAuditError });
     }
   }
 
@@ -168,6 +293,35 @@ export function AdminPage() {
     }
   }
 
+  async function approveUser(userId) {
+    try {
+      setFeedback({ type: "", text: "" });
+      await api.post(`/api/users/${userId}/approve`, {});
+      setFeedback({ type: "success", text: labels.approved });
+      await loadAdminData();
+      window.dispatchEvent(new Event("app:badges-refresh"));
+    } catch (error) {
+      setFeedback({ type: "error", text: error.message });
+    }
+  }
+
+  async function rejectUser(item) {
+    const reason = window.prompt(`${labels.confirmReject}: ${item.fullName}\n${labels.rejectReason}`, "");
+    if (reason === null) {
+      return;
+    }
+
+    try {
+      setFeedback({ type: "", text: "" });
+      await api.post(`/api/users/${item.id}/reject`, { reason });
+      setFeedback({ type: "success", text: labels.rejected });
+      await loadAdminData();
+      window.dispatchEvent(new Event("app:badges-refresh"));
+    } catch (error) {
+      setFeedback({ type: "error", text: error.message });
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="panel">
@@ -182,7 +336,7 @@ export function AdminPage() {
           <p className={`form-alert form-alert--${feedback.type}`}>{feedback.text}</p>
         ) : null}
 
-        {user.roleCode !== "ADMIN" ? <p className="muted-text">{labels.onlyAdmin}</p> : null}
+        {user.roleCode !== "ADMIN" ? <p className="muted-text">{labels.directorAccess}</p> : null}
 
         {selectedUserId ? (
           <div className="admin-filter">
@@ -336,7 +490,15 @@ export function AdminPage() {
             pendingUsers.map((item) => (
               <div className="summary-row" key={item.id}>
                 <span>{item.fullName}</span>
-                <strong>{translateRole(item.roleCode || item.roleTitle, language)}</strong>
+                <div className="inline-actions">
+                  <strong>{translateRole(item.roleCode || item.roleTitle, language)}</strong>
+                  <button className="ghost-button" onClick={() => approveUser(item.id)}>
+                    {t("users.approve")}
+                  </button>
+                  <button className="danger-button" onClick={() => rejectUser(item)}>
+                    {labels.reject}
+                  </button>
+                </div>
               </div>
             ))
           ) : (
@@ -346,11 +508,95 @@ export function AdminPage() {
 
         <article className="panel panel--wide">
           <div className="panel__header">
-            <h3>{t("admin.auditLog")}</h3>
+            <div>
+              <h3>{t("admin.auditLog")}</h3>
+              <p className="muted-text">
+                {labels.limit}: {auditLogs.length}
+              </p>
+            </div>
           </div>
+
+          <form className="audit-filters" onSubmit={applyAuditFilters}>
+            <label>
+              {labels.searchAudit}
+              <input value={auditFilters.query} onChange={(event) => updateAuditFilter("query", event.target.value)} />
+            </label>
+            <label>
+              {labels.auditFilters}
+              <select
+                value={auditFilters.entityType}
+                onChange={(event) => updateAuditFilter("entityType", event.target.value)}
+              >
+                <option value="">{labels.allEvents}</option>
+                {auditEntityTypes.map((entityType) => (
+                  <option key={entityType} value={entityType}>
+                    {entityType}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {labels.actor}
+              <select value={auditFilters.userId} onChange={(event) => updateAuditFilter("userId", event.target.value)}>
+                <option value="">{labels.allUsers}</option>
+                {users.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {labels.dateFrom}
+              <input
+                type="date"
+                value={auditFilters.dateFrom}
+                onChange={(event) => updateAuditFilter("dateFrom", event.target.value)}
+              />
+            </label>
+            <label>
+              {labels.dateTo}
+              <input
+                type="date"
+                value={auditFilters.dateTo}
+                onChange={(event) => updateAuditFilter("dateTo", event.target.value)}
+              />
+            </label>
+            <label>
+              {labels.limit}
+              <select value={auditFilters.limit} onChange={(event) => updateAuditFilter("limit", event.target.value)}>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+              </select>
+            </label>
+            <div className="inline-actions audit-filters__actions">
+              <button className="primary-button" type="submit">
+                {labels.applyFilters}
+              </button>
+              <button className="ghost-button" type="button" onClick={resetAuditFilters}>
+                {labels.resetFilters}
+              </button>
+              <button className="ghost-button" type="button" onClick={downloadAuditCsv}>
+                {labels.exportAuditCsv}
+              </button>
+            </div>
+          </form>
+
           {auditLogs.map((item) => (
             <div className="summary-row" key={item.id}>
-              <span>{translateAuditAction(item.action, language)}</span>
+              <span>
+                {translateAuditAction(item.action, language)}
+                <small>
+                  {labels.actor}: {item.userName || item.userId} · {labels.entity}: {item.entityType}/{item.entityId}
+                </small>
+                {item.ipAddress || item.userAgent ? (
+                  <small>
+                    {labels.ipAddress}: {item.ipAddress || "-"} · {labels.userAgent}: {item.userAgent || "-"}
+                  </small>
+                ) : null}
+              </span>
               <strong>{new Date(item.createdAt).toLocaleString(getLocale(language))}</strong>
             </div>
           ))}

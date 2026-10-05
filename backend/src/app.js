@@ -15,6 +15,7 @@ const dashboardRoutes = require("./routes/dashboard");
 const metaRoutes = require("./routes/meta");
 const reportsRoutes = require("./routes/reports");
 const auditRoutes = require("./routes/audit");
+const filesRoutes = require("./routes/files");
 
 ensureStorage();
 
@@ -22,9 +23,26 @@ const app = express();
 const frontendIndexPath = path.join(FRONTEND_DIST_DIR, "index.html");
 const hasFrontendBuild = fs.existsSync(frontendIndexPath);
 
+function isLocalNetworkOrigin(origin) {
+  try {
+    const { hostname } = new URL(origin);
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return true;
+    }
+
+    return (
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
 function buildCorsOptions() {
   if (!CORS_ORIGIN || CORS_ORIGIN === "*") {
-    return {};
+    return { origin: true };
   }
 
   const allowedOrigins = CORS_ORIGIN.split(",")
@@ -33,7 +51,7 @@ function buildCorsOptions() {
 
   return {
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || isLocalNetworkOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -45,17 +63,22 @@ function buildCorsOptions() {
 
 app.use(cors(buildCorsOptions()));
 app.use(express.json());
-app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/uploads", (_req, res) => {
+  res.status(404).json({ message: "Files are available only through protected API routes." });
+});
 app.use("/api/meta", metaRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/messages", messagesRoutes);
 app.use("/api/requests", requestsRoutes);
+app.use("/api/applications", requestsRoutes);
 app.use("/api/documents", documentsRoutes);
+app.use("/api/files", filesRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/audit-logs", auditRoutes);
+app.use("/api/activity-log", auditRoutes);
 
 if (hasFrontendBuild) {
   app.use(express.static(FRONTEND_DIST_DIR));

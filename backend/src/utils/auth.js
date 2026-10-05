@@ -23,6 +23,8 @@ function signToken(user) {
 }
 
 function sanitizeUser(user) {
+  const avatar = user.avatar || user.avatarPath || "";
+
   return {
     id: user.id,
     fullName: user.fullName,
@@ -33,6 +35,9 @@ function sanitizeUser(user) {
     departmentId: user.departmentId,
     roleCode: user.roleCode,
     status: user.status,
+    avatar,
+    avatarPath: avatar,
+    avatarUpdatedAt: user.avatarUpdatedAt || null,
     createdAt: user.createdAt,
     approvedAt: user.approvedAt || null,
   };

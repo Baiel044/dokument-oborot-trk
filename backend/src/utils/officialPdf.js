@@ -4,8 +4,8 @@ const crypto = require("crypto");
 const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
 const { UPLOAD_DIR } = require("./config");
-const LETTERHEAD_PDF = path.join(__dirname, "..", "assets", "letterhead-template.pdf");
-const LETTERHEAD_IMAGE = path.join(__dirname, "..", "assets", "letterhead.png");
+const LETTERHEAD_PDF = path.join(__dirname, "..", "..", "assets", "letterhead-template.pdf");
+const LETTERHEAD_IMAGE = path.join(__dirname, "..", "..", "assets", "letterhead.png");
 
 function buildSafePdfName(title) {
   const safeBaseName = String(title || "official-document")
@@ -249,6 +249,7 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
     gap: 16,
   });
 
+  drawParagraph("Номер документа", request.documentNumber);
   drawParagraph("Название документа", request.documentTitle);
   drawParagraph("Тип обращения", request.type);
   drawParagraph("Автор", `${author.fullName} (${author.position || author.roleCode})`);
@@ -283,6 +284,7 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
       mimeType: "application/pdf",
       generatedAt: new Date().toISOString(),
       isOfficial: true,
+      documentNumber: request.documentNumber,
     },
   };
 }

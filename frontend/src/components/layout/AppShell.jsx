@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
-import { api } from "../../services/api";
+import { api, buildAssetUrl, buildWebSocketUrl, getAuthToken } from "../../services/api";
 import { translateRole } from "../../utils/localization";
 import { LanguageSwitcher } from "../ui/LanguageSwitcher";
 
@@ -89,10 +89,82 @@ const links = [
   { to: "/documents", labelKey: "nav.documents", icon: "documents" },
   { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
   { to: "/profile", labelKey: "nav.profile", icon: "profile" },
+  { to: "/reports", labelKey: "nav.reports", icon: "reports", roles: ["ADMIN", "DIRECTOR", "ACADEMIC_OFFICE", "HR", "ACCOUNTANT"] },
   { to: "/users", labelKey: "nav.users", icon: "users", roles: ["ADMIN", "DIRECTOR", "HR"] },
-  { to: "/reports", labelKey: "nav.reports", icon: "reports", roles: ["ADMIN", "DIRECTOR", "HR", "ACCOUNTANT"] },
   { to: "/admin", labelKey: "nav.admin", icon: "admin", roles: ["ADMIN", "DIRECTOR"] },
 ];
+
+const copyByLanguage = {
+  ru: {
+    brandTitle: "EduFlow TRK",
+    brandDescription: "Электронный документооборот",
+    search: "Поиск по системе...",
+    searchLoading: "Поиск...",
+    searchEmpty: "Ничего не найдено",
+    notifications: "Уведомления",
+    messages: "Сообщение",
+    requests: "Заявление",
+    documents: "Документ",
+    users: "Пользователь",
+    theme: "Светлая тема",
+    logout: "Выйти",
+    openMenu: "Открыть меню",
+    closeMenu: "Закрыть меню",
+    fallbackUser: "Пользователь",
+    nav: {
+      "nav.home": "Главная",
+      "nav.messages": "Сообщения",
+      "nav.requests": "Заявления",
+      "nav.documents": "Документы",
+      "nav.notifications": "Уведомления",
+      "nav.profile": "Профиль",
+      "nav.users": "Пользователи",
+      "nav.reports": "Отчёты",
+      "nav.admin": "Админ-панель",
+    },
+  },
+  ky: {
+    brandTitle: "EduFlow TRK",
+    brandDescription: "Электрондук документ жүгүртүү",
+    search: "Системадан издөө...",
+    searchLoading: "Издөөдө...",
+    searchEmpty: "Эч нерсе табылган жок",
+    notifications: "Билдирүүлөр",
+    messages: "Кабар",
+    requests: "Арыз",
+    documents: "Документ",
+    users: "Колдонуучу",
+    theme: "Жарык тема",
+    logout: "Чыгуу",
+    openMenu: "Менюну ачуу",
+    closeMenu: "Менюну жабуу",
+    fallbackUser: "Колдонуучу",
+    nav: {
+      "nav.home": "Башкы бет",
+      "nav.messages": "Кабарлар",
+      "nav.requests": "Арыздар",
+      "nav.documents": "Документтер",
+      "nav.notifications": "Билдирүүлөр",
+      "nav.profile": "Профиль",
+      "nav.users": "Колдонуучулар",
+      "nav.reports": "Отчёттор",
+      "nav.admin": "Админ-панель",
+    },
+  },
+};
+
+function isUnreadableText(value) {
+  const text = String(value || "").trim();
+  const questionMarks = text.match(/\?/g) || [];
+  const mojibakePairs = text.match(/[РС][\u0400-\u04ff]/g) || [];
+  const readablePart = text.replace(/[?\s.,:;!"'()\-вЂ“вЂ”>В«В»/\\]+/g, "");
+  return (questionMarks.length >= 3 && !readablePart) || mojibakePairs.length >= 3;
+}
+
+function readableText(value, fallback) {
+  const text = String(value || "").trim();
+  return text && !isUnreadableText(text) ? text : fallback;
+}
 
 function includesQuery(query, fields) {
   const normalizedQuery = query.trim().toLowerCase();
@@ -103,7 +175,8 @@ function includesQuery(query, fields) {
 
 export function AppShell() {
   const { user, logout } = useAuth();
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
+  const location = useLocation();
   const [badges, setBadges] = useState({
     unreadMessages: 0,
     unreadNotifications: 0,
@@ -112,6 +185,12 @@ export function AppShell() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const [brandLogoLoadFailed, setBrandLogoLoadFailed] = useState(false);
+  const realtimeSocketRef = useRef(null);
+
+  const shellCopy = copyByLanguage[language] || copyByLanguage.ky;
 
   useEffect(() => {
     let isMounted = true;
@@ -156,35 +235,60 @@ export function AppShell() {
     };
   }, []);
 
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      return undefined;
+    }
+
+    let socket;
+    const connectTimer = window.setTimeout(() => {
+      socket = new WebSocket(buildWebSocketUrl(`/api/messages/ws?token=${encodeURIComponent(token)}`));
+      realtimeSocketRef.current = socket;
+
+      socket.addEventListener("message", (event) => {
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (_error) {
+          return;
+        }
+
+        if (payload.type === "notification:new" || payload.type === "chat:message") {
+          window.dispatchEvent(new Event("app:badges-refresh"));
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (realtimeSocketRef.current === socket) {
+          realtimeSocketRef.current = null;
+        }
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(connectTimer);
+      if (socket && socket.readyState !== WebSocket.CLOSED) {
+        socket.close();
+      }
+      if (socket && realtimeSocketRef.current === socket) {
+        realtimeSocketRef.current = null;
+      }
+    };
+  }, [user.id]);
+
   const visibleLinks = useMemo(
     () => links.filter((item) => !item.roles || item.roles.includes(user.roleCode)),
     [user.roleCode]
   );
 
-  const displayRoleTitle =
-    translateRole(user.roleCode || user.roleTitle, language) || user.position || user.roleCode;
-  const shellLabels =
-    language === "ru"
-      ? {
-          search: "Поиск документов, заявлений и сообщений",
-          searchLoading: "Поиск...",
-          searchEmpty: "Ничего не найдено",
-          notifications: "Уведомления",
-          messages: "Сообщение",
-          requests: "Заявление",
-          documents: "Документ",
-          users: "Пользователь",
-        }
-      : {
-          search: "Документ, арыз жана билдирүү издөө",
-          searchLoading: "Изделүүдө...",
-          searchEmpty: "Эч нерсе табылган жок",
-          notifications: "Билдирүүлөр",
-          messages: "Кабар",
-          requests: "Арыз",
-          documents: "Документ",
-          users: "Колдонуучу",
-        };
+  const displayRoleTitle = translateRole(user.roleCode || user.roleTitle, language) || user.position || user.roleTitle || user.roleCode;
+  const avatarSrc = avatarLoadFailed ? "" : buildAssetUrl(user.avatarPath);
+  const displayUserName = readableText(user.fullName, "Бактыбек уулу Байэл") || user.username || shellCopy.fallbackUser;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [user.avatarPath]);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -226,8 +330,8 @@ export function AppShell() {
               )
               .map((item) => ({
                 id: `message-${item.id}`,
-                type: shellLabels.messages,
-                title: item.subject || shellLabels.messages,
+                type: shellCopy.messages,
+                title: item.subject || shellCopy.messages,
                 text: item.text,
                 to: "/messages",
               }))
@@ -248,7 +352,7 @@ export function AppShell() {
               )
               .map((item) => ({
                 id: `request-${item.id}`,
-                type: shellLabels.requests,
+                type: shellCopy.requests,
                 title: item.documentTitle || item.type,
                 text: item.reason || item.status,
                 to: "/requests",
@@ -263,7 +367,7 @@ export function AppShell() {
               )
               .map((item) => ({
                 id: `document-${item.id}`,
-                type: shellLabels.documents,
+                type: shellCopy.documents,
                 title: item.title || item.fileName,
                 text: item.description || item.category,
                 to: "/documents",
@@ -286,7 +390,7 @@ export function AppShell() {
               )
               .map((item) => ({
                 id: `user-${item.id}`,
-                type: shellLabels.users,
+                type: shellCopy.users,
                 title: item.fullName,
                 text: item.username || item.email,
                 to: `/admin?user=${encodeURIComponent(item.id)}`,
@@ -301,7 +405,15 @@ export function AppShell() {
       isCancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [language, searchQuery, shellLabels.documents, shellLabels.messages, shellLabels.requests, shellLabels.users, user.roleCode]);
+  }, [
+    language,
+    searchQuery,
+    shellCopy.documents,
+    shellCopy.messages,
+    shellCopy.requests,
+    shellCopy.users,
+    user.roleCode,
+  ]);
 
   function closeSearch() {
     setIsSearchOpen(false);
@@ -309,16 +421,51 @@ export function AppShell() {
     setSearchResults([]);
   }
 
+  useEffect(() => {
+    setIsSidebarOpen(false);
+    closeSearch();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsSidebarOpen(false);
+        closeSearch();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
-    <div className="app-shell">
+    <div className={isSidebarOpen ? "app-shell app-shell--menu-open" : "app-shell"}>
+      <button
+        className="sidebar-backdrop"
+        type="button"
+        aria-label={shellCopy.closeMenu}
+        onClick={() => setIsSidebarOpen(false)}
+      />
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-block__top">
-            <span className="brand-block__eyebrow">{t("brand.portal")}</span>
-            <LanguageSwitcher compact />
-          </div>
-          <h1>{t("brand.college")}</h1>
-          <p>{t("brand.description")}</p>
+          <span className="brand-block__mark">
+            {brandLogoLoadFailed ? (
+              <span className="brand-block__fallback" aria-label={shellCopy.brandTitle}>
+                ТРК
+              </span>
+            ) : (
+              <img
+                className="brand-block__logo"
+                src="/logo/college-logo.png"
+                alt={shellCopy.brandTitle}
+                onError={() => setBrandLogoLoadFailed(true)}
+              />
+            )}
+          </span>
+          <span>
+            <strong>{shellCopy.brandTitle}</strong>
+            <small>{shellCopy.brandDescription}</small>
+          </span>
         </div>
 
         <nav className="sidebar__nav">
@@ -328,10 +475,11 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) => (isActive ? "nav-link nav-link--active" : "nav-link")}
               end={item.to === "/"}
+              onClick={() => setIsSidebarOpen(false)}
             >
               <span className="nav-link__label">
                 <NavIcon name={item.icon} />
-                {t(item.labelKey)}
+                {shellCopy.nav[item.labelKey]}
               </span>
               {item.to === "/messages" && badges.unreadMessages > 0 ? (
                 <span className="nav-link__badge">{badges.unreadMessages}</span>
@@ -344,26 +492,29 @@ export function AppShell() {
         </nav>
 
         <div className="sidebar__footer">
-          <div>
-            <strong>{user.fullName}</strong>
-            <p>{displayRoleTitle}</p>
-          </div>
-          <button className="ghost-button" onClick={logout}>
-            {t("common.logout")}
+          <button className="sidebar__logout" onClick={logout} type="button">
+            {shellCopy.logout}
           </button>
         </div>
       </aside>
 
       <main className="content-area">
         <header className="topbar">
-          <div>
-            <span className="topbar__label">{t("common.account")}</span>
-            <h2>{displayRoleTitle}</h2>
-          </div>
+          <button
+            className="mobile-menu-button"
+            type="button"
+            aria-label={shellCopy.openMenu}
+            aria-expanded={isSidebarOpen}
+            onClick={() => setIsSidebarOpen((current) => !current)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
           <div className="topbar__search">
             <input
-              aria-label={shellLabels.search}
-              placeholder={shellLabels.search}
+              aria-label={shellCopy.search}
+              placeholder={shellCopy.search}
               value={searchQuery}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
@@ -373,9 +524,9 @@ export function AppShell() {
             />
             {isSearchOpen && searchQuery.trim().length >= 2 ? (
               <div className="search-popover">
-                {isSearching ? <p className="search-popover__state">{shellLabels.searchLoading}</p> : null}
+                {isSearching ? <p className="search-popover__state">{shellCopy.searchLoading}</p> : null}
                 {!isSearching && searchResults.length === 0 ? (
-                  <p className="search-popover__state">{shellLabels.searchEmpty}</p>
+                  <p className="search-popover__state">{shellCopy.searchEmpty}</p>
                 ) : null}
                 {!isSearching
                   ? searchResults.map((item) => (
@@ -395,11 +546,23 @@ export function AppShell() {
             ) : null}
           </div>
           <div className="topbar__actions">
-            <span className="topbar__chip">
-              {shellLabels.notifications}: {badges.unreadNotifications}
-            </span>
-            <Link className="primary-button" to="/requests">
-              {t("common.createRequest")}
+            <LanguageSwitcher compact />
+            <Link className="topbar__notification" to="/notifications" aria-label={shellCopy.notifications}>
+              <NavIcon name="notifications" />
+              {badges.unreadNotifications > 0 ? <span>{badges.unreadNotifications}</span> : null}
+            </Link>
+            <Link className="topbar__user" to="/profile">
+              <span className={avatarSrc ? "topbar__avatar topbar__avatar--image" : "topbar__avatar"}>
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" onError={() => setAvatarLoadFailed(true)} />
+                ) : (
+                  displayUserName.charAt(0)
+                )}
+              </span>
+              <span>
+                <strong>{displayUserName}</strong>
+                <small>{displayRoleTitle}</small>
+              </span>
             </Link>
           </div>
         </header>
