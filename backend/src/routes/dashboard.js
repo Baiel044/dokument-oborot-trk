@@ -75,6 +75,7 @@ router.get("/", authenticate, (req, res) => {
     documents: visibleDocuments.length,
     myRequests: ["ADMIN", "DIRECTOR"].includes(req.user.roleCode) ? visibleRequests.length : myRequests.length,
     inboxMessages: myInbox.length,
+    unreadMessages: myInbox.filter((message) => !message.isRead).length,
     unreadNotifications: unreadNotifications.length,
   };
 

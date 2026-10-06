@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, ArrowUpRight, Bell, CalendarDays, FileText, MessageSquare, Plus } from "lucide-react";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { StatCard } from "../../components/ui/StatCard";
 import { useAuth } from "../../context/AuthContext";
@@ -100,93 +101,88 @@ function getRequestStatusBadgeClass(status, language) {
   return "dashboard-status-badge--pending";
 }
 
+function getStatusBadgeClass(status, language) {
+  const tone = getRequestStatusBadgeClass(status, language).replace("dashboard-status-badge--", "");
+  const map = {
+    approved: "badge-success",
+    completed: "badge-success",
+    returned: "badge-warning",
+    rejected: "badge-danger",
+    draft: "badge-neutral",
+    pending: "badge-info",
+  };
+  return `badge ${map[tone] || "badge-info"}`;
+}
+
 const copyByLanguage = {
   ru: {
     greeting: "Добро пожаловать",
-    welcome: "Добро пожаловать в систему EduFlow TRK",
+    welcome: "Обзор заявлений, сообщений и документов на сегодня.",
     allRequests: "Все заявления",
     allMessages: "Все сообщения",
+    allNotifications: "Все уведомления",
     recentRequests: "Последние заявления",
+    recentRequestsHint: "Пять последних обращений, доступных вам",
     recentMessages: "Последние сообщения",
+    recentNotifications: "Непрочитанные уведомления",
     tableNo: "№",
     tableTheme: "Тема",
     tableStatus: "Статус",
     tableDate: "Дата",
-    tableAction: "Действие",
+    tableAction: "Открыть",
     myRequests: "Мои заявления",
     messages: "Сообщения",
     documents: "Документы",
     notifications: "Уведомления",
-    inProgress: "В ожидании",
-    newItems: "Новые",
-    official: "Оформленные: 5",
+    pending: "на рассмотрении",
+    approved: "подписано",
+    unread: "непрочитанных",
+    available: "доступно вам",
+    newRequest: "Новое заявление",
     noRequests: "Пока нет заявлений",
     noRequestsText: "Созданные заявления появятся здесь.",
     noMessages: "Сообщений пока нет",
     noMessagesText: "Новые переписки появятся здесь.",
-    unreadSubject: "Тема недоступна",
-    unreadText: "Текст сообщения недоступен",
-    promoTitle: "Упрощаем работу и усиливаем результат",
+    noNotifications: "Всё прочитано",
+    noNotificationsText: "Новые уведомления появятся здесь.",
+    unreadSubject: "Без темы",
+    fallbackUser: "Пользователь",
+    loading: "Кабинет загружается...",
   },
   ky: {
-    greeting: "Кош келиниз",
-    welcome: "EduFlow TRK системасына кош келиңиз",
+    greeting: "Кош келиңиз",
+    welcome: "Бүгүнкү арыздар, кабарлар жана документтер боюнча кыскача маалымат.",
     allRequests: "Бардык арыздар",
-    allMessages: "Бардык билдирүүлөр",
+    allMessages: "Бардык кабарлар",
+    allNotifications: "Бардык билдирмелер",
     recentRequests: "Акыркы арыздар",
-    recentMessages: "Акыркы билдирүүлөр",
+    recentRequestsHint: "Сизге жеткиликтүү акыркы беш кайрылуу",
+    recentMessages: "Акыркы кабарлар",
+    recentNotifications: "Окулбаган билдирмелер",
     tableNo: "№",
     tableTheme: "Тема",
     tableStatus: "Статус",
     tableDate: "Дата",
-    tableAction: "Аракет",
+    tableAction: "Ачуу",
     myRequests: "Менин арыздарым",
-    messages: "Билдирүүлөр",
+    messages: "Кабарлар",
     documents: "Документтер",
-    notifications: "Эскертмелер",
-    inProgress: "Күтүүдө",
-    newItems: "Жаңы",
-    official: "Расмий: 5",
+    notifications: "Билдирмелер",
+    pending: "каралууда",
+    approved: "кол коюлду",
+    unread: "окулбаган",
+    available: "сизге жеткиликтүү",
+    newRequest: "Жаңы арыз",
     noRequests: "Арыздар жок",
     noRequestsText: "Жаңы кайрылуулар ушул жерде чыгат.",
-    noMessages: "Билдирүүлөр жок",
+    noMessages: "Кабарлар жок",
     noMessagesText: "Жаңы каттар ушул жерде чыгат.",
-    unreadSubject: "Тема жеткиликсиз",
-    unreadText: "Билдирүүнүн тексти жеткиликсиз",
-    promoTitle: "Ишти жеңилдетебиз, натыйжаны күчөтөбүз",
+    noNotifications: "Баары окулду",
+    noNotificationsText: "Жаңы билдирмелер ушул жерде чыгат.",
+    unreadSubject: "Темасыз",
+    fallbackUser: "Колдонуучу",
+    loading: "Кабинет жүктөлүүдө...",
   },
-};
-
-const fallbackRequestTitles = [
-  {
-    ru: "Заявление на отпуск",
-    ky: "Өргүү боюнча арыз",
-  },
-  {
-    ru: "Командировка",
-    ky: "Иш сапар",
-  },
-  {
-    ru: "Передача документа",
-    ky: "Документ тапшыруу",
-  },
-  {
-    ru: "Материальная помощь",
-    ky: "Материалдык жардам",
-  },
-];
-
-const fallbackMessages = {
-  ru: [
-    { sender: "Директор", text: "Проверьте документ..." },
-    { sender: "Учебная часть", text: "Отправлен новый отчёт..." },
-    { sender: "Отдел кадров", text: "Спасибо за информацию!" },
-  ],
-  ky: [
-    { sender: "Директор", text: "Документти текшерип чыктыңыз..." },
-    { sender: "Окуу бөлүмү", text: "Жаңы отчёт жөнөтүлдү..." },
-    { sender: "Кадр бөлүмү", text: "Маалымат үчүн рахмат!" },
-  ],
 };
 
 export function DashboardPage() {
@@ -211,30 +207,38 @@ export function DashboardPage() {
   const copy = useMemo(() => copyByLanguage[language] || copyByLanguage.ky, [language]);
 
   if (!data) {
-    return <div className="page-loader">{language === "ru" ? "Кабинет загружается..." : "Кабинет жүктөлүүдө..."}</div>;
+    return <div className="page-loader">{copy.loading}</div>;
   }
 
-  const { summary, recentRequests, recentMessages } = data;
-  const displayName = readableText(user.fullName, "Бактыбек уулу Байэл") || user.username || "Пользователь";
-  const dashboardDate = formatDashboardDate(today, language);
+  const { summary, recentRequests, recentMessages, recentNotifications = [] } = data;
+  const displayName = readableText(user.fullName, "") || user.username || copy.fallbackUser;
 
   return (
-    <div className="dashboard-model">
-      <section className="dashboard-model__hero">
+    <div className="page">
+      <section className="page-header">
         <div>
-          <h1>
-            {copy.greeting}, {displayName} <span aria-hidden="true">👋</span>
+          <h1 className="page-title">
+            {copy.greeting}, {displayName}
           </h1>
-          <p>{copy.welcome}</p>
+          <p className="page-subtitle">{copy.welcome}</p>
         </div>
-        <div className="dashboard-model__date">{dashboardDate}</div>
+        <div className="page-header-actions">
+          <span className="date-pill">
+            <CalendarDays size={16} aria-hidden="true" />
+            {formatDashboardDate(today, language)}
+          </span>
+          <Link className="btn btn-primary" to="/requests">
+            <Plus size={18} aria-hidden="true" />
+            {copy.newRequest}
+          </Link>
+        </div>
       </section>
 
-      <section className="stat-grid dashboard-model__stats">
+      <section className="kpi-grid kpi-grid--4 stagger-in">
         <StatCard
           title={copy.myRequests}
           value={summary.myRequests}
-          subtitle={`${copy.inProgress}: 2`}
+          subtitle={`${summary.pendingRequests ?? 0} ${copy.pending} · ${summary.approvedRequests ?? 0} ${copy.approved}`}
           accent="orange"
           icon="requests"
           onClick={() => navigate("/requests")}
@@ -243,7 +247,7 @@ export function DashboardPage() {
         <StatCard
           title={copy.messages}
           value={summary.inboxMessages}
-          subtitle={copy.newItems}
+          subtitle={`${summary.unreadMessages ?? 0} ${copy.unread}`}
           accent="blue"
           icon="messages"
           onClick={() => navigate("/messages")}
@@ -252,7 +256,7 @@ export function DashboardPage() {
         <StatCard
           title={copy.documents}
           value={summary.documents}
-          subtitle={copy.official}
+          subtitle={copy.available}
           accent="green"
           icon="documents"
           onClick={() => navigate("/documents")}
@@ -261,7 +265,7 @@ export function DashboardPage() {
         <StatCard
           title={copy.notifications}
           value={summary.unreadNotifications}
-          subtitle={copy.newItems}
+          subtitle={copy.unread}
           accent="red"
           icon="notifications"
           onClick={() => navigate("/notifications")}
@@ -269,90 +273,134 @@ export function DashboardPage() {
         />
       </section>
 
-      <section className="dashboard-model__grid">
-        <article className="panel dashboard-model__requests dashboard-requests-card">
-          <div className="panel__header">
-            <h3>{copy.recentRequests}</h3>
-            <Link className="dashboard-requests-card__link" to="/requests">
-              {copy.allRequests} →
+      <section className="dashboard-bottom-grid">
+        <article className="card">
+          <div className="card-header">
+            <div>
+              <h3 className="card-title">{copy.recentRequests}</h3>
+              <p className="card-subtitle">{copy.recentRequestsHint}</p>
+            </div>
+            <Link className="btn btn-ghost btn-sm" to="/requests">
+              {copy.allRequests}
+              <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
           {recentRequests.length ? (
-            <div className="dashboard-requests-table-wrap">
-              <div className="dashboard-table dashboard-requests-table">
-                <div className="dashboard-table__head">
-                  <span>{copy.tableNo}</span>
-                  <span>{copy.tableTheme}</span>
-                  <span>{copy.tableStatus}</span>
-                  <span>{copy.tableDate}</span>
-                  <span />
-                </div>
-                {recentRequests.slice(0, 4).map((item, index) => {
-                  const requestTitle = readableText(
-                    item.documentTitle || item.type,
-                    fallbackRequestTitles[index]?.[language] || fallbackRequestTitles[index]?.ky || copy.unreadSubject
-                  );
-                  const statusLabel = translateRequestStatus(item.status, language);
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>{copy.tableNo}</th>
+                    <th>{copy.tableTheme}</th>
+                    <th>{copy.tableStatus}</th>
+                    <th>{copy.tableDate}</th>
+                    <th aria-label={copy.tableAction} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRequests.slice(0, 5).map((item, index) => (
+                    <tr
+                      className="table-row-clickable"
+                      key={item.id}
+                      onClick={() => navigate(`/requests?request=${encodeURIComponent(item.id)}`)}
+                    >
+                      <td className="text-muted mono-num">{index + 1}</td>
+                      <td className="table-cell-strong">
+                        {readableText(item.documentTitle || item.type, copy.unreadSubject)}
+                      </td>
+                      <td>
+                        <span className={getStatusBadgeClass(item.status, language)}>
+                          {translateRequestStatus(item.status, language)}
+                        </span>
+                      </td>
+                      <td className="text-secondary mono-num">{formatDate(item.createdAt || item.updatedAt, language)}</td>
+                      <td className="table-actions">
+                        <Link
+                          className="btn btn-ghost btn-icon btn-sm"
+                          to={`/requests?request=${encodeURIComponent(item.id)}`}
+                          aria-label={copy.tableAction}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <ArrowUpRight size={16} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title={copy.noRequests} text={copy.noRequestsText} icon={FileText} />
+          )}
+        </article>
 
+        <div className="stack gap-4 dashboard-side">
+          <article className="card">
+            <div className="card-header">
+              <h3 className="card-title">{copy.recentMessages}</h3>
+              <Link className="btn btn-ghost btn-sm" to="/messages">
+                {copy.allMessages}
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
+            {recentMessages.length ? (
+              <ul className="list">
+                {recentMessages.slice(0, 4).map((item) => {
+                  const sender = readableText(item.senderName, "");
+                  const title = sender || readableText(item.subject, copy.unreadSubject);
+                  const meta = sender ? readableText(item.subject || item.text, "") : readableText(item.text, "");
                   return (
-                    <div className="dashboard-table__row dashboard-request-row" key={item.id}>
-                      <span className="dashboard-request-row__number">{index + 1}</span>
-                      <strong className="dashboard-request-row__title">{requestTitle}</strong>
-                      <span className={`dashboard-status-badge ${getRequestStatusBadgeClass(item.status, language)}`}>
-                        {statusLabel}
-                      </span>
-                      <span className="dashboard-request-row__date">{formatDate(item.createdAt || item.updatedAt, language)}</span>
-                      <Link
-                        className="dashboard-request-row__action"
-                        to={`/requests?request=${encodeURIComponent(item.id)}`}
-                        title={copy.tableAction}
-                        aria-label={copy.tableAction}
-                      >
-                        <span aria-hidden="true">↗</span>
+                    <li key={item.id}>
+                      <Link className="list-item" to="/messages">
+                        <span className="avatar avatar-md">{title.charAt(0)}</span>
+                        <span className="list-item-text">
+                          <span className="list-item-title">
+                            {title}
+                            {!item.isRead ? <span className="dot dot-primary" aria-hidden="true" /> : null}
+                          </span>
+                          {meta ? <span className="list-item-meta">{meta}</span> : null}
+                        </span>
+                        <time className="list-item-time">{formatDate(item.createdAt, language)}</time>
                       </Link>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
-            </div>
-          ) : (
-            <div className="dashboard-requests-empty">
-              <EmptyState title={copy.noRequests} text={copy.noRequestsText} />
-            </div>
-          )}
-        </article>
+              </ul>
+            ) : (
+              <EmptyState title={copy.noMessages} text={copy.noMessagesText} icon={MessageSquare} />
+            )}
+          </article>
 
-        <article className="panel dashboard-model__messages">
-          <div className="panel__header">
-            <h3>{copy.recentMessages}</h3>
-            <Link to="/messages">{copy.allMessages} →</Link>
-          </div>
-          {recentMessages.length ? (
-            recentMessages.slice(0, 3).map((item, index) => (
-              <Link className="dashboard-message" to="/messages" key={item.id}>
-                <span className="dashboard-message__avatar">
-                  {readableText(item.senderName, fallbackMessages[language]?.[index]?.sender || "D").charAt(0)}
-                </span>
-                <span>
-                  <strong>{readableText(item.senderName, fallbackMessages[language]?.[index]?.sender || copy.unreadSubject)}</strong>
-                  <small>{readableText(item.text, fallbackMessages[language]?.[index]?.text || copy.unreadText)}</small>
-                </span>
-                <time>{formatDate(item.createdAt, language)}</time>
+          <article className="card">
+            <div className="card-header">
+              <h3 className="card-title">{copy.recentNotifications}</h3>
+              <Link className="btn btn-ghost btn-sm" to="/notifications">
+                {copy.allNotifications}
+                <ArrowRight size={16} aria-hidden="true" />
               </Link>
-            ))
-          ) : (
-            <EmptyState title={copy.noMessages} text={copy.noMessagesText} />
-          )}
-        </article>
-
-        <article className="dashboard-model__promo">
-          <strong>{copy.promoTitle}</strong>
-          <div className="dashboard-model__folder" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-        </article>
+            </div>
+            {recentNotifications.length ? (
+              <ul className="list">
+                {recentNotifications.slice(0, 4).map((item) => (
+                  <li key={item.id}>
+                    <Link className="list-item" to={item.targetPath || "/notifications"}>
+                      <span className="list-item-icon" aria-hidden="true">
+                        <Bell size={16} />
+                      </span>
+                      <span className="list-item-text">
+                        <span className="list-item-title">{readableText(item.title, copy.notifications)}</span>
+                        {item.text ? <span className="list-item-meta">{item.text}</span> : null}
+                      </span>
+                      <time className="list-item-time">{formatDate(item.createdAt, language)}</time>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState title={copy.noNotifications} text={copy.noNotificationsText} icon={Bell} />
+            )}
+          </article>
+        </div>
       </section>
     </div>
   );
