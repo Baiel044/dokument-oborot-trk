@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { UserPlus } from "lucide-react";
 import { api } from "../../services/api";
+import { CreateUserPanel } from "./CreateUserPanel";
 import {
   getLocale,
   translateAuditAction,
@@ -47,6 +49,7 @@ export function AdminPage() {
   const [users, setUsers] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [feedback, setFeedback] = useState({ type: "", text: "" });
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const selectedUserId = searchParams.get("user");
   const visibleUsers = selectedUserId ? users.filter((item) => item.id === selectedUserId) : users;
 
@@ -54,6 +57,7 @@ export function AdminPage() {
     language === "ru"
       ? {
           usersAccess: "Пользователи и доступы",
+          addUser: "Добавить пользователя",
           login: "Логин",
           password: "Новый пароль",
           passwordPlaceholder: "Задать новый пароль",
@@ -98,6 +102,7 @@ export function AdminPage() {
         }
       : {
           usersAccess: "Колдонуучулар жана жеткиликтүүлүк",
+          addUser: "Колдонуучу кошуу",
           login: "Логин",
           password: "Жаңы сырсөз",
           passwordPlaceholder: "Жаңы сырсөз коюу",
@@ -330,7 +335,21 @@ export function AdminPage() {
             <h3>{labels.usersAccess}</h3>
             <p className="muted-text">{labels.passwordNote}</p>
           </div>
+          {user.roleCode === "ADMIN" && !isCreateOpen ? (
+            <button className="btn btn-primary" type="button" onClick={() => setIsCreateOpen(true)}>
+              <UserPlus size={18} aria-hidden="true" />
+              {labels.addUser}
+            </button>
+          ) : null}
         </div>
+
+        {user.roleCode === "ADMIN" && isCreateOpen ? (
+          <CreateUserPanel
+            language={language}
+            onCreated={() => loadAdminData()}
+            onClose={() => setIsCreateOpen(false)}
+          />
+        ) : null}
 
         {feedback.text ? (
           <p className={`form-alert form-alert--${feedback.type}`}>{feedback.text}</p>

@@ -3865,3 +3865,100 @@ input[type="radio"] {
     display: none;
   }
 }
+
+/* ---------- Admin: create user ---------- */
+
+.create-user-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-primary-200);
+  background: linear-gradient(180deg, var(--color-primary-50), var(--color-surface) 120px);
+}
+
+.create-user-panel__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.create-user-panel__header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-user-panel__header h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.create-user-panel__header p {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.create-user-panel__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-600);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.create-user-form,
+.create-user-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.create-user-password {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.create-user-password > .input-with-icon {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-user-credentials {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.create-user-credentials > div {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+.create-user-credentials dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.create-user-credentials dd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .create-user-credentials {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .create-user-password {
+    flex-direction: column;
+  }
+}
