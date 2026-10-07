@@ -99,9 +99,13 @@
 |   |-- vite.config.js
 |   `-- package.json
 |-- package.json
-|-- render.yaml
+|-- railway.json
 `-- README.md
 ```
+
+## Публикация в интернете
+
+Frontend публикуется на Vercel, backend — на Railway с постоянным диском. Пошаговая инструкция: [DEPLOY.md](DEPLOY.md).
 
 ## Установка зависимостей
 
