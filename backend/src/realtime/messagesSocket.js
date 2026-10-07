@@ -3,10 +3,14 @@ const jwt = require("jsonwebtoken");
 const { URL } = require("url");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { JWT_SECRET } = require("../utils/config");
+const { normalizeMessageInput } = require("../utils/messageValidation");
+const { isTokenCurrent } = require("../utils/sessions");
 const { onNewNotification } = require("./notificationsHub");
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const clientsByUser = new Map();
+// A single chat message is at most a few KB; anything far larger is a broken or hostile client.
+const MAX_WS_MESSAGE_BYTES = 64 * 1024;
 let notificationListenerAttached = false;
 
 function decorateMessage(message, users) {
@@ -55,38 +59,50 @@ function sendError(socket, message) {
   sendJson(socket, { type: "chat:error", message });
 }
 
+/**
+ * Parses complete frames from the start of `buffer`.
+ * Returns the frames and how many bytes were consumed; an incomplete frame stays in the buffer
+ * until the rest of it arrives in the next TCP chunk.
+ */
 function decodeFrames(buffer) {
   const frames = [];
   let offset = 0;
 
   while (offset + 2 <= buffer.length) {
-    const firstByte = buffer[offset];
-    const secondByte = buffer[offset + 1];
+    let cursor = offset;
+    const firstByte = buffer[cursor];
+    const secondByte = buffer[cursor + 1];
+    const fin = Boolean(firstByte & 0x80);
     const opcode = firstByte & 0x0f;
     const isMasked = Boolean(secondByte & 0x80);
     let length = secondByte & 0x7f;
-    offset += 2;
+    cursor += 2;
 
     if (length === 126) {
-      if (offset + 2 > buffer.length) break;
-      length = buffer.readUInt16BE(offset);
-      offset += 2;
+      if (cursor + 2 > buffer.length) break;
+      length = buffer.readUInt16BE(cursor);
+      cursor += 2;
     } else if (length === 127) {
-      if (offset + 8 > buffer.length) break;
-      length = Number(buffer.readBigUInt64BE(offset));
-      offset += 8;
+      if (cursor + 8 > buffer.length) break;
+      const bigLength = buffer.readBigUInt64BE(cursor);
+      length = bigLength > BigInt(MAX_WS_MESSAGE_BYTES) ? Infinity : Number(bigLength);
+      cursor += 8;
+    }
+
+    if (length > MAX_WS_MESSAGE_BYTES) {
+      return { frames, consumed: offset, tooLarge: true };
     }
 
     let mask;
     if (isMasked) {
-      if (offset + 4 > buffer.length) break;
-      mask = buffer.subarray(offset, offset + 4);
-      offset += 4;
+      if (cursor + 4 > buffer.length) break;
+      mask = buffer.subarray(cursor, cursor + 4);
+      cursor += 4;
     }
 
-    if (offset + length > buffer.length) break;
-    const payload = Buffer.from(buffer.subarray(offset, offset + length));
-    offset += length;
+    if (cursor + length > buffer.length) break;
+    const payload = Buffer.from(buffer.subarray(cursor, cursor + length));
+    cursor += length;
 
     if (mask) {
       for (let index = 0; index < payload.length; index += 1) {
@@ -94,10 +110,32 @@ function decodeFrames(buffer) {
       }
     }
 
-    frames.push({ opcode, payload });
+    frames.push({ fin, opcode, payload });
+    offset = cursor;
   }
 
-  return frames;
+  return { frames, consumed: offset, tooLarge: false };
+}
+
+function closeSocket(socket, code = 1000) {
+  const payload = Buffer.alloc(2);
+  payload.writeUInt16BE(code, 0);
+  sendFrame(socket, 0x8, payload);
+  socket.end();
+}
+
+/** Re-reads the socket's user; closes the connection if the account was blocked, deleted or signed out. */
+function refreshSocketUser(socket) {
+  const db = readDb();
+  const user = db.users.find((item) => item.id === socket.user.id);
+  if (!isTokenCurrent(socket.tokenPayload, user)) {
+    removeClient(socket.user.id, socket);
+    closeSocket(socket, 1008);
+    return null;
+  }
+
+  socket.user = user;
+  return { user, db };
 }
 
 function addClient(userId, socket) {
@@ -118,19 +156,35 @@ function removeClient(userId, socket) {
   }
 }
 
+function getAllowedUsers() {
+  const db = readDb();
+  return new Map(db.users.filter((user) => user.status === "active").map((user) => [user.id, user]));
+}
+
+function deliver(sockets, payload, allowedUsers) {
+  sockets.forEach((socket) => {
+    const user = allowedUsers.get(socket.user.id);
+    if (!isTokenCurrent(socket.tokenPayload, user)) {
+      removeClient(socket.user.id, socket);
+      closeSocket(socket, 1008);
+      return;
+    }
+    sendJson(socket, payload);
+  });
+}
+
 function sendToUser(userId, payload) {
   const sockets = clientsByUser.get(userId);
   if (!sockets) {
     return;
   }
 
-  sockets.forEach((socket) => sendJson(socket, payload));
+  deliver([...sockets], payload, getAllowedUsers());
 }
 
 function broadcast(payload) {
-  clientsByUser.forEach((sockets) => {
-    sockets.forEach((socket) => sendJson(socket, payload));
-  });
+  const allowedUsers = getAllowedUsers();
+  [...clientsByUser.values()].forEach((sockets) => deliver([...sockets], payload, allowedUsers));
 }
 
 function buildRequestFromSocket(req) {
@@ -141,16 +195,14 @@ function buildRequestFromSocket(req) {
   };
 }
 
-function createGlobalMessage(socket, payload, req) {
-  const text = String(payload.text || "").trim();
-  const subject = String(payload.subject || "").trim() || "Общий чат";
-
-  if (!text) {
-    sendError(socket, "Введите текст сообщения.");
+function createGlobalMessage(socket, payload, req, db) {
+  const input = normalizeMessageInput(payload, "Общий чат");
+  if (input.error) {
+    sendError(socket, input.error);
     return;
   }
+  const { text, subject } = input;
 
-  const db = readDb();
   const message = {
     id: createId("msg"),
     senderId: socket.user.id,
@@ -180,17 +232,20 @@ function createGlobalMessage(socket, payload, req) {
   });
 }
 
-function createDirectMessage(socket, payload, req) {
+function createDirectMessage(socket, payload, req, db) {
   const receiverId = String(payload.receiverId || "").trim();
-  const text = String(payload.text || "").trim();
-  const subject = String(payload.subject || "").trim() || "Личное сообщение";
-
-  if (!receiverId || !text) {
-    sendError(socket, "Выберите собеседника и введите текст сообщения.");
+  if (!receiverId) {
+    sendError(socket, "Кабар алуучуну тандаңыз.");
     return;
   }
 
-  const db = readDb();
+  const input = normalizeMessageInput(payload, "Личное сообщение");
+  if (input.error) {
+    sendError(socket, input.error);
+    return;
+  }
+  const { text, subject } = input;
+
   const recipient = db.users.find((user) => user.id === receiverId && user.status === "active");
   if (!recipient) {
     sendError(socket, "Получатель не найден.");
@@ -254,16 +309,21 @@ function handleTextMessage(socket, text, req) {
     return;
   }
 
-  if (payload.type !== "chat:send") {
+  if (!payload || payload.type !== "chat:send") {
+    return;
+  }
+
+  const session = refreshSocketUser(socket);
+  if (!session) {
     return;
   }
 
   if (payload.chatScope === "global") {
-    createGlobalMessage(socket, payload, req);
+    createGlobalMessage(socket, payload, req, session.db);
     return;
   }
 
-  createDirectMessage(socket, payload, req);
+  createDirectMessage(socket, payload, req, session.db);
 }
 
 function rejectUpgrade(socket, statusCode, statusText) {
@@ -290,10 +350,12 @@ function attachMessagesWebSocket(server) {
 
     const token = url.searchParams.get("token");
     let user;
+    let tokenPayload;
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      tokenPayload = jwt.verify(token, JWT_SECRET);
       const db = readDb();
-      user = db.users.find((item) => item.id === decoded.sub && item.status === "active");
+      const candidate = db.users.find((item) => item.id === tokenPayload.sub);
+      user = isTokenCurrent(tokenPayload, candidate) ? candidate : null;
     } catch (_error) {
       user = null;
     }
@@ -322,18 +384,56 @@ function attachMessagesWebSocket(server) {
     );
 
     socket.user = user;
+    socket.tokenPayload = tokenPayload;
     addClient(user.id, socket);
     sendJson(socket, { type: "chat:ready", userId: user.id });
 
-    socket.on("data", (buffer) => {
-      decodeFrames(buffer).forEach((frame) => {
-        if (frame.opcode === 0x1) {
-          handleTextMessage(socket, frame.payload.toString("utf8"), req);
-        } else if (frame.opcode === 0x8) {
+    let pending = Buffer.alloc(0);
+    let fragments = [];
+    let fragmentsLength = 0;
+
+    socket.on("data", (chunk) => {
+      pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
+      const { frames, consumed, tooLarge } = decodeFrames(pending);
+      pending = pending.subarray(consumed);
+
+      if (tooLarge || pending.length > MAX_WS_MESSAGE_BYTES + 14) {
+        removeClient(user.id, socket);
+        closeSocket(socket, 1009);
+        return;
+      }
+
+      frames.forEach((frame) => {
+        if (frame.opcode === 0x8) {
           removeClient(user.id, socket);
           socket.end();
-        } else if (frame.opcode === 0x9) {
+          return;
+        }
+        if (frame.opcode === 0x9) {
           sendFrame(socket, 0xA, frame.payload);
+          return;
+        }
+        if (frame.opcode !== 0x1 && frame.opcode !== 0x0) {
+          return;
+        }
+
+        // Text messages may arrive split into a first frame and continuation frames.
+        if (frame.opcode === 0x1) {
+          fragments = [];
+          fragmentsLength = 0;
+        }
+        fragments.push(frame.payload);
+        fragmentsLength += frame.payload.length;
+        if (fragmentsLength > MAX_WS_MESSAGE_BYTES) {
+          removeClient(user.id, socket);
+          closeSocket(socket, 1009);
+          return;
+        }
+        if (frame.fin) {
+          const message = Buffer.concat(fragments).toString("utf8");
+          fragments = [];
+          fragmentsLength = 0;
+          handleTextMessage(socket, message, req);
         }
       });
     });

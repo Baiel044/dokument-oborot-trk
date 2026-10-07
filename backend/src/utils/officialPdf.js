@@ -3,9 +3,9 @@ const path = require("path");
 const crypto = require("crypto");
 const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
+const { getPdfFontCandidates } = require("./pdfFonts");
 const { UPLOAD_DIR } = require("./config");
-const LETTERHEAD_PDF = path.join(__dirname, "..", "..", "assets", "letterhead-template.pdf");
-const LETTERHEAD_IMAGE = path.join(__dirname, "..", "..", "assets", "letterhead.png");
+const { LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE, getLetterheadTemplatePath } = require("./letterhead");
 
 function buildSafePdfName(title) {
   const safeBaseName = String(title || "official-document")
@@ -130,18 +130,10 @@ function transliterate(text) {
     .join("");
 }
 
-function getFontCandidates() {
-  const windowsDir = process.env.WINDIR || "C:\\Windows";
-  return [
-    path.join(windowsDir, "Fonts", "arial.ttf"),
-    path.join(windowsDir, "Fonts", "segoeui.ttf"),
-    path.join(windowsDir, "Fonts", "times.ttf"),
-  ];
-}
 
 async function embedPdfFont(pdfDoc) {
   pdfDoc.registerFontkit(fontkit);
-  const fontPath = getFontCandidates().find((candidate) => fs.existsSync(candidate));
+  const fontPath = getPdfFontCandidates().find((candidate) => fs.existsSync(candidate));
 
   if (fontPath) {
     const fontBytes = fs.readFileSync(fontPath);
@@ -163,8 +155,8 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
   let pdfDoc;
   let page;
 
-  if (fs.existsSync(LETTERHEAD_PDF)) {
-    const templatePdf = await PDFDocument.load(fs.readFileSync(LETTERHEAD_PDF));
+  if (fs.existsSync(getLetterheadTemplatePath())) {
+    const templatePdf = await PDFDocument.load(fs.readFileSync(getLetterheadTemplatePath()));
     pdfDoc = await PDFDocument.create();
     const [templatePage] = await pdfDoc.copyPages(templatePdf, [0]);
     pdfDoc.addPage(templatePage);
@@ -179,9 +171,9 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
   const margin = 52;
   const pageWidth = page.getWidth();
   const contentWidth = pageWidth - margin * 2;
-  let cursorY = fs.existsSync(LETTERHEAD_PDF) ? page.getHeight() - 170 : page.getHeight() - 70;
+  let cursorY = fs.existsSync(getLetterheadTemplatePath()) ? page.getHeight() - 170 : page.getHeight() - 70;
 
-  if (!fs.existsSync(LETTERHEAD_PDF) && fs.existsSync(LETTERHEAD_IMAGE)) {
+  if (!fs.existsSync(getLetterheadTemplatePath()) && fs.existsSync(LETTERHEAD_IMAGE)) {
     const letterheadImage = await pdfDoc.embedPng(fs.readFileSync(LETTERHEAD_IMAGE));
     const bannerWidth = 170;
     const bannerHeight = (letterheadImage.height / letterheadImage.width) * bannerWidth;
@@ -227,7 +219,7 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
     .slice(0, 16)
     .toUpperCase();
 
-  if (!fs.existsSync(LETTERHEAD_PDF)) {
+  if (!fs.existsSync(getLetterheadTemplatePath())) {
     page.drawRectangle({
       x: 36,
       y: 36,
