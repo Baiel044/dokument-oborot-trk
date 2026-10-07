@@ -5,7 +5,7 @@ const multer = require("multer");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { authenticate } = require("../middleware/auth");
 const { comparePassword, hashPassword, sanitizeUser } = require("../utils/auth");
-const { ROLES, getDepartmentTitle, getRoleTitle } = require("../utils/catalogs");
+const { DEPARTMENTS, ROLES, getDepartmentTitle, getRoleTitle } = require("../utils/catalogs");
 const { UPLOAD_DIR } = require("../utils/config");
 
 const router = express.Router();
@@ -264,6 +264,87 @@ router.get("/", authenticate, (req, res) => {
   res.json({ users: users.map(enrichUser) });
 });
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_ADMIN_PASSWORD_LENGTH = 8;
+
+// Administrator creates an account directly (any role, active right away, no approval step).
+router.post("/", authenticate, async (req, res) => {
+  if (!canManageUsers(req.user)) {
+    return res.status(403).json({ message: "Колдонуучуну администратор гана түзө алат." });
+  }
+
+  const fullName = String(req.body.fullName || "").trim();
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const username = String(req.body.username || "").trim();
+  const password = String(req.body.password || "");
+  const phone = String(req.body.phone || "").trim();
+  const position = String(req.body.position || "").trim();
+  const roleCode = String(req.body.roleCode || "").trim();
+  const departmentId = String(req.body.departmentId || "").trim();
+  const status = String(req.body.status || "active").trim();
+
+  if (!fullName || !email || !username || !password || !roleCode || !departmentId) {
+    return res.status(400).json({ message: "Аты-жөнү, email, логин, сырсөз, ролу жана бөлүмү милдеттүү." });
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    return res.status(400).json({ message: "Email туура эмес жазылган." });
+  }
+  if (!/^[a-zA-Z0-9._-]{3,40}$/.test(username)) {
+    return res.status(400).json({ message: "Логин 3–40 белгиден турушу керек: латын тамгалары, сандар, . _ -" });
+  }
+  if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ message: `Сырсөз кеминде ${MIN_ADMIN_PASSWORD_LENGTH} белгиден турушу керек.` });
+  }
+  if (!ROLES.some((role) => role.code === roleCode)) {
+    return res.status(400).json({ message: "Туура ролду тандаңыз." });
+  }
+  if (!DEPARTMENTS.some((department) => department.id === departmentId)) {
+    return res.status(400).json({ message: "Туура бөлүмдү тандаңыз." });
+  }
+  if (!["active", "pending", "blocked"].includes(status)) {
+    return res.status(400).json({ message: "Туура абалды тандаңыз." });
+  }
+
+  const passwordHash = await hashPassword(password);
+  const db = readDb();
+  if (db.users.some((item) => item.email.toLowerCase() === email)) {
+    return res.status(409).json({ message: "Бул email мурун катталган." });
+  }
+  if (db.users.some((item) => item.username.toLowerCase() === username.toLowerCase())) {
+    return res.status(409).json({ message: "Бул логин мурун катталган." });
+  }
+
+  const createdAt = new Date().toISOString();
+  const newUser = {
+    id: createId("user"),
+    fullName,
+    email,
+    phone,
+    username,
+    passwordHash,
+    position,
+    departmentId,
+    roleCode,
+    status,
+    createdAt,
+    approvedAt: status === "active" ? createdAt : null,
+    createdBy: req.user.id,
+  };
+
+  db.users.unshift(newUser);
+  writeDb(db);
+  appendAuditLog({
+    userId: req.user.id,
+    action: "Администратор жаңы колдонуучу түздү",
+    entityType: "user",
+    entityId: newUser.id,
+    req,
+    metadata: { username, roleCode, departmentId },
+  });
+
+  return res.status(201).json({ user: enrichUser(newUser) });
+});
+
 router.put("/:id", authenticate, async (req, res) => {
   const db = readDb();
   const userIndex = db.users.findIndex((item) => item.id === req.params.id);
@@ -329,6 +410,19 @@ router.put("/:id", authenticate, async (req, res) => {
       return res.status(409).json({ message: "Бул логин мурун катталган." });
     }
     target.username = username;
+  }
+
+  if (req.body.roleCode !== undefined && !ROLES.some((role) => role.code === req.body.roleCode)) {
+    return res.status(400).json({ message: "Туура ролду тандаңыз." });
+  }
+  if (
+    req.body.departmentId !== undefined &&
+    !DEPARTMENTS.some((department) => department.id === req.body.departmentId)
+  ) {
+    return res.status(400).json({ message: "Туура бөлүмдү тандаңыз." });
+  }
+  if (req.body.status !== undefined && !["active", "pending", "blocked"].includes(req.body.status)) {
+    return res.status(400).json({ message: "Туура абалды тандаңыз." });
   }
 
   allowedFields
