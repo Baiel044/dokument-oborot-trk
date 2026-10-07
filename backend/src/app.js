@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const { ensureStorage } = require("./data/store");
-const { CORS_ORIGIN, FRONTEND_DIST_DIR, UPLOAD_DIR } = require("./utils/config");
+const { CORS_ORIGIN, FRONTEND_DIST_DIR, TRUST_PROXY, UPLOAD_DIR } = require("./utils/config");
 
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
@@ -20,6 +20,9 @@ const filesRoutes = require("./routes/files");
 ensureStorage();
 
 const app = express();
+if (TRUST_PROXY) {
+  app.set("trust proxy", /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY) : TRUST_PROXY);
+}
 const frontendIndexPath = path.join(FRONTEND_DIST_DIR, "index.html");
 const hasFrontendBuild = fs.existsSync(frontendIndexPath);
 
@@ -46,17 +49,28 @@ function buildCorsOptions() {
   }
 
   const allowedOrigins = CORS_ORIGIN.split(",")
-    .map((item) => item.trim())
+    .map((item) => item.trim().replace(/\/+$/, ""))
     .filter(Boolean);
+
+  // "https://*.vercel.app" style entries allow any subdomain (e.g. Vercel preview deployments).
+  const isAllowedOrigin = (origin) =>
+    allowedOrigins.some((allowed) => {
+      if (!allowed.includes("*")) {
+        return allowed === origin;
+      }
+      const escaped = allowed.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
+      return new RegExp(`^${escaped.join("[a-z0-9-]+")}$`, "i").test(origin);
+    });
 
   return {
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || isLocalNetworkOrigin(origin)) {
+      if (!origin || isAllowedOrigin(origin) || isLocalNetworkOrigin(origin)) {
         callback(null, true);
         return;
       }
 
-      callback(new Error("CORS origin is not allowed"));
+      // No CORS headers: the browser blocks the response for unknown sites.
+      callback(null, false);
     },
   };
 }

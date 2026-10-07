@@ -3,7 +3,17 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const { DatabaseSync } = require("node:sqlite");
 const { v4: uuidv4 } = require("uuid");
-const { DATA_DIR, DB_FILE, LEGACY_JSON_FILE, UPLOAD_DIR } = require("../utils/config");
+const {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  ADMIN_USERNAME,
+  DATA_DIR,
+  DB_FILE,
+  DB_LOCK_TIMEOUT_MS,
+  IS_PRODUCTION,
+  LEGACY_JSON_FILE,
+  UPLOAD_DIR,
+} = require("../utils/config");
 const { publishNotifications } = require("../realtime/notificationsHub");
 
 /*
@@ -32,6 +42,48 @@ let database = null;
 let cache = null;
 const snapshots = new WeakMap();
 
+/** Production: an empty database gets only the first administrator, configured by environment variables. */
+function buildProductionSeed() {
+  if (ADMIN_PASSWORD.length < 10) {
+    throw new Error("ADMIN_PASSWORD (at least 10 characters) is required to create the first administrator in production.");
+  }
+
+  const now = new Date().toISOString();
+  return {
+    users: [
+      {
+        id: "user-admin",
+        fullName: "Системный администратор",
+        email: ADMIN_EMAIL,
+        phone: "",
+        username: ADMIN_USERNAME,
+        passwordHash: bcrypt.hashSync(ADMIN_PASSWORD, 10),
+        position: "Администратор системы",
+        departmentId: "it",
+        roleCode: "ADMIN",
+        status: "active",
+        createdAt: now,
+        approvedAt: now,
+      },
+    ],
+    messages: [],
+    requests: [],
+    documents: [],
+    notifications: [],
+    auditLogs: [
+      {
+        id: "audit-seed-1",
+        userId: "user-admin",
+        action: "Система инициализирована",
+        entityType: "system",
+        entityId: "bootstrap",
+        createdAt: now,
+      },
+    ],
+  };
+}
+
+/** Development: demo users and sample data. */
 function buildSeed() {
   const now = new Date().toISOString();
 
@@ -202,7 +254,7 @@ function openDatabase() {
   try {
     // Only one server process may own the database: the in-memory cache assumes it is the sole writer.
     db.exec(`
-      PRAGMA busy_timeout = 3000;
+      PRAGMA busy_timeout = ${Math.max(0, Math.floor(DB_LOCK_TIMEOUT_MS))};
       PRAGMA locking_mode = EXCLUSIVE;
       PRAGMA journal_mode = WAL;
       BEGIN IMMEDIATE;
@@ -456,7 +508,7 @@ function ensureStorage() {
 
   if (isEmpty) {
     const legacyData = readLegacyJson();
-    importData(legacyData || buildSeed());
+    importData(legacyData || (IS_PRODUCTION ? buildProductionSeed() : buildSeed()));
     if (legacyData) {
       const archivedPath = `${LEGACY_JSON_FILE}.migrated-${new Date().toISOString().replace(/[:.]/g, "-")}`;
       fs.renameSync(LEGACY_JSON_FILE, archivedPath);
