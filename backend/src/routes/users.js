@@ -4,11 +4,15 @@ const path = require("path");
 const multer = require("multer");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { authenticate } = require("../middleware/auth");
-const { comparePassword, hashPassword, sanitizeUser } = require("../utils/auth");
+const { comparePassword, hashPassword, sanitizeUser, signToken } = require("../utils/auth");
 const { DEPARTMENTS, ROLES, getDepartmentTitle, getRoleTitle } = require("../utils/catalogs");
 const { UPLOAD_DIR } = require("../utils/config");
+const { removeUploadOnFailure } = require("../middleware/uploads");
 
 const router = express.Router();
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_ADMIN_PASSWORD_LENGTH = 8; // also used for self-service password changes
+
 const AVATAR_UPLOAD_DIR = path.join(UPLOAD_DIR, "avatars");
 const AVATAR_MIME_TYPES_BY_EXTENSION = {
   ".jpg": "image/jpeg",
@@ -152,8 +156,8 @@ function uploadCurrentUserAvatar(req, res) {
   });
 }
 
-router.post("/me/avatar", authenticate, uploadAvatar.single("avatar"), uploadCurrentUserAvatar);
-router.post("/avatar", authenticate, uploadAvatar.single("avatar"), uploadCurrentUserAvatar);
+router.post("/me/avatar", authenticate, removeUploadOnFailure, uploadAvatar.single("avatar"), uploadCurrentUserAvatar);
+router.post("/avatar", authenticate, removeUploadOnFailure, uploadAvatar.single("avatar"), uploadCurrentUserAvatar);
 
 router.get("/directory", authenticate, (_req, res) => {
   const db = readDb();
@@ -184,8 +188,8 @@ router.put("/me/password", authenticate, async (req, res) => {
     return res.status(400).json({ message: "Жаңы сырсөздөр дал келбейт." });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({ message: "Жаңы сырсөз кеминде 6 белгиден турушу керек." });
+  if (newPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ message: `Жаңы сырсөз кеминде ${MIN_ADMIN_PASSWORD_LENGTH} белгиден турушу керек.` });
   }
 
   const db = readDb();
@@ -211,7 +215,8 @@ router.put("/me/password", authenticate, async (req, res) => {
     req,
   });
 
-  res.json({ message: "Сырсөз жаңыртылды." });
+  // Other sessions are signed out; this one continues with a fresh token.
+  res.json({ message: "Сырсөз жаңыртылды.", token: signToken(user) });
 });
 
 router.get("/", authenticate, (req, res) => {
@@ -263,9 +268,6 @@ router.get("/", authenticate, (req, res) => {
 
   res.json({ users: users.map(enrichUser) });
 });
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_ADMIN_PASSWORD_LENGTH = 8;
 
 // Administrator creates an account directly (any role, active right away, no approval step).
 router.post("/", authenticate, async (req, res) => {
@@ -439,10 +441,11 @@ router.put("/:id", authenticate, async (req, res) => {
     }
 
     const password = String(req.body.password).trim();
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Сырсөз кеминде 6 белгиден турушу керек." });
+    if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ message: `Сырсөз кеминде ${MIN_ADMIN_PASSWORD_LENGTH} белгиден турушу керек.` });
     }
     target.passwordHash = await hashPassword(password);
+    target.passwordChangedAt = new Date().toISOString();
   }
 
   if (target.status === "active" && !target.approvedAt) {
@@ -501,22 +504,22 @@ router.patch("/:id/approve", authenticate, approveUser);
 
 router.patch("/:id/role", authenticate, (req, res) => {
   if (!canManageUsers(req.user)) {
-    return res.status(403).json({ message: "Р РѕР»РґСѓ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ РіР°РЅР° У©Р·РіУ©СЂС‚У© Р°Р»Р°С‚." });
+    return res.status(403).json({ message: "Ролду администратор гана өзгөртө алат." });
   }
 
   if (req.user.id === req.params.id) {
-    return res.status(400).json({ message: "УЁР· СЂРѕР»СѓТЈСѓР·РґСѓ У©Р·РіУ©СЂС‚ТЇТЇРіУ© Р±РѕР»Р±РѕР№С‚." });
+    return res.status(400).json({ message: "Өз ролуңузду өзгөртүүгө болбойт." });
   }
 
   const roleCode = String(req.body.roleCode || req.body.role || "").trim();
   if (!ROLES.some((role) => role.code === roleCode)) {
-    return res.status(400).json({ message: "РўСѓСѓСЂР° СЂРѕР»РґСѓ С‚Р°РЅРґР°ТЈС‹Р·." });
+    return res.status(400).json({ message: "Туура ролду тандаңыз." });
   }
 
   const db = readDb();
   const user = db.users.find((item) => item.id === req.params.id);
   if (!user) {
-    return res.status(404).json({ message: "РљРѕР»РґРѕРЅСѓСѓС‡Сѓ С‚Р°Р±С‹Р»РіР°РЅ Р¶РѕРє." });
+    return res.status(404).json({ message: "Колдонуучу табылган жок." });
   }
 
   user.roleCode = roleCode;
@@ -524,7 +527,7 @@ router.patch("/:id/role", authenticate, (req, res) => {
   writeDb(db);
   appendAuditLog({
     userId: req.user.id,
-    action: "РљРѕР»РґРѕРЅСѓСѓС‡СѓРЅСѓРЅ СЂРѕР»Сѓ У©Р·РіУ©СЂС‚ТЇР»РґТЇ",
+    action: "Колдонуучунун ролу өзгөртүлдү",
     entityType: "user",
     entityId: user.id,
     req,

@@ -623,10 +623,8 @@ function createId(prefix) {
 }
 
 function getRequestIp(req) {
-  const forwardedFor = req?.headers?.["x-forwarded-for"];
-  return String(Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor || req?.ip || "")
-    .split(",")[0]
-    .trim();
+  // req.ip already resolves X-Forwarded-For according to the "trust proxy" setting.
+  return String(req?.ip || req?.socket?.remoteAddress || "").trim();
 }
 
 function appendAuditLog({ userId, action, entityType, entityId, req, metadata }) {

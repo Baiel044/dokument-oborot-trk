@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
+const { getPdfFontCandidates } = require("./pdfFonts");
 
 function transliterate(text) {
   const map = {
@@ -85,18 +86,10 @@ function transliterate(text) {
     .join("");
 }
 
-function getFontCandidates() {
-  const windowsDir = process.env.WINDIR || "C:\\Windows";
-  return [
-    path.join(windowsDir, "Fonts", "arial.ttf"),
-    path.join(windowsDir, "Fonts", "segoeui.ttf"),
-    path.join(windowsDir, "Fonts", "times.ttf"),
-  ];
-}
 
 async function embedPdfFont(pdfDoc) {
   pdfDoc.registerFontkit(fontkit);
-  const fontPath = getFontCandidates().find((candidate) => fs.existsSync(candidate));
+  const fontPath = getPdfFontCandidates().find((candidate) => fs.existsSync(candidate));
 
   if (fontPath) {
     return {

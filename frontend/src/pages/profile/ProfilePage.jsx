@@ -161,7 +161,10 @@ export function ProfilePage() {
     }
 
     try {
-      await api.put("/api/users/me/password", passwordDraft);
+      const data = await api.put("/api/users/me/password", passwordDraft);
+      if (data.token) {
+        localStorage.setItem("eduflow-token", data.token);
+      }
       setPasswordDraft({ currentPassword: "", newPassword: "", confirmPassword: "" });
       setPasswordFeedback({ type: "success", text: labels.passwordChanged });
     } catch (error) {

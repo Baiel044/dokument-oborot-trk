@@ -1,9 +1,11 @@
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const path = require("path");
 const { ensureStorage } = require("./data/store");
-const { CORS_ORIGIN, FRONTEND_DIST_DIR, TRUST_PROXY, UPLOAD_DIR } = require("./utils/config");
+const { CORS_ORIGIN, FRONTEND_DIST_DIR, IS_PRODUCTION, TRUST_PROXY, UPLOAD_DIR } = require("./utils/config");
+const { loginLimiter, passwordResetLimiter, registrationLimiter } = require("./middleware/rateLimits");
 
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
@@ -31,6 +33,11 @@ function isLocalNetworkOrigin(origin) {
     const { hostname } = new URL(origin);
     if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
       return true;
+    }
+
+    // Other machines on the local network are trusted only in development.
+    if (IS_PRODUCTION) {
+      return false;
     }
 
     return (
@@ -75,12 +82,23 @@ function buildCorsOptions() {
   };
 }
 
+app.use(
+  helmet({
+    // The API returns JSON; the optional built frontend loads Google Fonts, so no CSP here.
+    contentSecurityPolicy: false,
+    // Avatars and files are requested from the Vercel site, a different origin.
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(cors(buildCorsOptions()));
 app.use(express.json());
 app.use("/uploads", (_req, res) => {
   res.status(404).json({ message: "Files are available only through protected API routes." });
 });
 app.use("/api/meta", metaRoutes);
+app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth/register", registrationLimiter);
+app.use("/api/auth/forgot-password", passwordResetLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/messages", messagesRoutes);

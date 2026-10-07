@@ -5,6 +5,7 @@ const path = require("path");
 const { authenticate } = require("../middleware/auth");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { UPLOAD_DIR } = require("../utils/config");
+const { removeUploadOnFailure } = require("../middleware/uploads");
 const { getRoleTitle, normalizeRequestStatus } = require("../utils/catalogs");
 const { generateOfficialRequestPdf } = require("../utils/officialPdf");
 const { getOrCreateDocumentNumber } = require("../utils/documentNumbering");
@@ -344,7 +345,7 @@ router.get("/", authenticate, (req, res) => {
   res.json({ requests });
 });
 
-router.post("/", authenticate, upload.single("attachment"), (req, res) => {
+router.post("/", authenticate, removeUploadOnFailure, upload.single("attachment"), (req, res) => {
   if (!["TEACHER", "ADMIN"].includes(req.user.roleCode)) {
     return res.status(403).json({ message: "Кайрылууну түзүү окутуучуга гана жеткиликтүү." });
   }
@@ -446,7 +447,20 @@ router.post("/", authenticate, upload.single("attachment"), (req, res) => {
   res.status(201).json({ request: decorateRequest(request, db.users) });
 });
 
-router.put("/:id", authenticate, upload.single("attachment"), (req, res) => {
+// Checks edit rights before multer stores anything on disk.
+function requireRequestEditPermission(req, res, next) {
+  const db = readDb();
+  const request = db.requests.find((item) => item.id === req.params.id);
+  if (!request) {
+    return res.status(404).json({ message: "Кайрылуу табылган жок." });
+  }
+  if (request.userId !== req.user.id && req.user.roleCode !== "ADMIN") {
+    return res.status(403).json({ message: "Бул кайрылууну түзөтүүгө укук жетишсиз." });
+  }
+  return next();
+}
+
+router.put("/:id", authenticate, requireRequestEditPermission, removeUploadOnFailure, upload.single("attachment"), (req, res) => {
   const db = readDb();
   const requestIndex = db.requests.findIndex((item) => item.id === req.params.id);
 

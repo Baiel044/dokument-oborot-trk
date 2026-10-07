@@ -55,8 +55,8 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ message: "Сырсөздөр дал келбейт." });
   }
 
-  if (String(password).length < 6) {
-    return res.status(400).json({ message: "Сырсөз кеминде 6 белгиден турушу керек." });
+  if (String(password).length < 8) {
+    return res.status(400).json({ message: "Сырсөз кеминде 8 белгиден турушу керек." });
   }
 
   const normalizedRoleCode = String(roleCode || "").trim();
@@ -166,17 +166,7 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ message: "Логин же сырсөз туура эмес." });
   }
 
-  if (user.status !== "active") {
-    auditFailedLogin({
-      req,
-      identifier,
-      user,
-      reason: `status_${user.status}`,
-    });
-    return res.status(403).json({ message: "Аккаунт али ырастала элек же бөгөттөлгөн." });
-  }
-
-  const isValid = await comparePassword(password, user.passwordHash);
+  const isValid = await comparePassword(String(password), user.passwordHash);
   if (!isValid) {
     auditFailedLogin({
       req,
@@ -185,6 +175,17 @@ router.post("/login", async (req, res) => {
       reason: "invalid_password",
     });
     return res.status(401).json({ message: "Логин же сырсөз туура эмес." });
+  }
+
+  // The account status is revealed only to someone who knows the password.
+  if (user.status !== "active") {
+    auditFailedLogin({
+      req,
+      identifier,
+      user,
+      reason: `status_${user.status}`,
+    });
+    return res.status(403).json({ message: "Аккаунт али ырастала элек же бөгөттөлгөн." });
   }
 
   appendAuditLog({

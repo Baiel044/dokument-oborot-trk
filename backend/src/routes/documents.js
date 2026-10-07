@@ -1,10 +1,13 @@
 const express = require("express");
+const { PDFDocument } = require("pdf-lib");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const { authenticate } = require("../middleware/auth");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { UPLOAD_DIR } = require("../utils/config");
+const { CUSTOM_TEMPLATE_DIR, getLetterheadTemplatePath } = require("../utils/letterhead");
+const { removeUploadOnFailure } = require("../middleware/uploads");
 const { DOCUMENT_CATEGORIES, normalizeDocumentCategory } = require("../utils/catalogs");
 const { generateLetterheadDocumentPdf, generateOfficialDocumentPdf } = require("../utils/letterheadDocumentPdf");
 const { createDocumentNumber } = require("../utils/documentNumbering");
@@ -32,8 +35,6 @@ const DOCUMENT_STATUS_ACTIONS = {
   rejected: "rejected",
   completed: "completed",
 };
-const LETTERHEAD_ASSETS_DIR = path.join(__dirname, "..", "..", "assets");
-const LETTERHEAD_TEMPLATE_PATH = path.join(LETTERHEAD_ASSETS_DIR, "letterhead-template.pdf");
 
 function normalizeDocumentStatus(status) {
   const normalized = String(status || "").trim().toLowerCase();
@@ -183,6 +184,21 @@ function getDirectorUserIds(db, excludedUserId) {
     .map((user) => user.id);
 }
 
+const DOCUMENT_STATUS_LABELS = {
+  draft: "Долбоор",
+  submitted: "Жөнөтүлдү",
+  pending: "Каралууда",
+  approved: "Бекитилди",
+  returned: "Кайтарылды",
+  rejected: "Четке кагылды",
+  completed: "Аткарылды",
+};
+const DOCUMENT_STATUS_NOTIFICATION_TITLES = {
+  approved: "Документ бекитилди",
+  returned: "Документ кайтарылды",
+  rejected: "Документ четке кагылды",
+};
+
 function addDocumentNotifications(db, req, document, status, oldStatus, createdAt) {
   const targetPath = `/documents?document=${encodeURIComponent(document.id)}`;
   const documentTitle = document.title || document.fileName || document.documentNumber || "document";
@@ -193,21 +209,23 @@ function addDocumentNotifications(db, req, document, status, oldStatus, createdA
 
   if (status === "submitted" || status === "pending") {
     getDirectorUserIds(db, req.user.id).forEach((userId) => targets.add(userId));
-    title = "Document sent to review";
-    text = `${actorName} sent "${documentTitle}" for review.`;
+    title = "Документ кароого жөнөтүлдү";
+    text = `${actorName} "${documentTitle}" документин кароого жөнөттү.`;
   } else if (["approved", "returned", "rejected"].includes(status)) {
     if (document.uploadedBy && document.uploadedBy !== req.user.id) {
       targets.add(document.uploadedBy);
     }
-    title = `Document ${status}`;
-    text = `"${documentTitle}" status changed from ${oldStatus} to ${status}.`;
+    title = DOCUMENT_STATUS_NOTIFICATION_TITLES[status];
+    text = `"${documentTitle}" документинин статусу: ${DOCUMENT_STATUS_LABELS[oldStatus] || oldStatus} → ${
+      DOCUMENT_STATUS_LABELS[status] || status
+    }.`;
   } else if (status === "completed") {
     if (document.uploadedBy && document.uploadedBy !== req.user.id) {
       targets.add(document.uploadedBy);
     }
     getDirectorUserIds(db, req.user.id).forEach((userId) => targets.add(userId));
-    title = "Document completed";
-    text = `"${documentTitle}" was completed by ${actorName}.`;
+    title = "Документ аткарылды";
+    text = `"${documentTitle}" документин ${actorName} аткарды.`;
   }
 
   targets.forEach((userId) => {
@@ -368,16 +386,16 @@ function updateDocumentStatus(req, res, statusOverride) {
   const document = db.documents.find((item) => item.id === req.params.id);
 
   if (!document) {
-    return res.status(404).json({ message: "Р”РѕРєСѓРјРµРЅС‚ С‚Р°Р±С‹Р»РіР°РЅ Р¶РѕРє." });
+    return res.status(404).json({ message: "Документ табылган жок." });
   }
 
   if (!canManageDocumentStatus(req.user, document)) {
-    return res.status(403).json({ message: "Р”РѕРєСѓРјРµРЅС‚С‚РёРЅ СЃС‚Р°С‚СѓСЃСѓРЅ У©Р·РіУ©СЂС‚ТЇТЇРіУ© СѓРєСѓРє Р¶РµС‚РёС€СЃРёР·." });
+    return res.status(403).json({ message: "Документтин статусун өзгөртүүгө укук жетишсиз." });
   }
 
   const status = String(statusOverride || req.body.status || "").trim();
   if (!DOCUMENT_API_STATUSES.includes(status)) {
-    return res.status(400).json({ message: "Р”РѕРєСѓРјРµРЅС‚С‚РёРЅ С‚СѓСѓСЂР° СЃС‚Р°С‚СѓСЃСѓРЅ С‚Р°РЅРґР°ТЈС‹Р·." });
+    return res.status(400).json({ message: "Документтин туура статусун тандаңыз." });
   }
 
   const now = new Date().toISOString();
@@ -401,15 +419,15 @@ function updateDocumentStatus(req, res, statusOverride) {
     db,
     req,
     document,
-    "Р”РѕРєСѓРјРµРЅС‚ СЃС‚Р°С‚СѓСЃСѓ У©Р·РіУ©СЂРґТЇ",
-    `"${document.title}" РґРѕРєСѓРјРµРЅС‚РёРЅРёРЅ СЃС‚Р°С‚СѓСЃСѓ: ${status}.`,
+    "Документ статусу өзгөрдү",
+    `"${document.title}" документинин статусу: ${status}.`,
     now
   );
 
   writeDb(db);
   appendAuditLog({
     userId: req.user.id,
-    action: "Р”РѕРєСѓРјРµРЅС‚ СЃС‚Р°С‚СѓСЃСѓ У©Р·РіУ©СЂС‚ТЇР»РґТЇ",
+    action: "Документ статусу өзгөртүлдү",
     entityType: "document",
     entityId: document.id,
     req,
@@ -586,10 +604,11 @@ const upload = multer({
 
 const letterheadTemplateStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    fs.mkdirSync(LETTERHEAD_ASSETS_DIR, { recursive: true });
-    cb(null, LETTERHEAD_ASSETS_DIR);
+    fs.mkdirSync(CUSTOM_TEMPLATE_DIR, { recursive: true });
+    cb(null, CUSTOM_TEMPLATE_DIR);
   },
-  filename: (_req, _file, cb) => cb(null, "letterhead-template.pdf"),
+  // Written under a temporary name and swapped in only after it is verified to be a valid PDF.
+  filename: (_req, _file, cb) => cb(null, `upload-${Date.now()}.pdf`),
 });
 
 const uploadLetterheadTemplate = multer({
@@ -621,7 +640,8 @@ function getEffectiveDocumentCategory(document) {
 }
 
 function getLetterheadTemplateInfo() {
-  if (!fs.existsSync(LETTERHEAD_TEMPLATE_PATH)) {
+  const templatePath = getLetterheadTemplatePath();
+  if (!fs.existsSync(templatePath)) {
     return {
       exists: false,
       fileName: "letterhead-template.pdf",
@@ -630,7 +650,7 @@ function getLetterheadTemplateInfo() {
     };
   }
 
-  const stats = fs.statSync(LETTERHEAD_TEMPLATE_PATH);
+  const stats = fs.statSync(templatePath);
   return {
     exists: true,
     fileName: "letterhead-template.pdf",
@@ -683,7 +703,7 @@ router.get("/", authenticate, (req, res) => {
   res.json({ documents });
 });
 
-router.post("/", authenticate, upload.single("file"), (req, res) => {
+router.post("/", authenticate, removeUploadOnFailure, upload.single("file"), (req, res) => {
   const db = readDb();
   const category = normalizeDocumentCategory(req.body.category);
   const initialStatus = parseInitialDocumentStatus(req.body.status);
@@ -822,7 +842,8 @@ router.get("/letterhead-template", authenticate, (req, res) => {
 });
 
 router.get("/letterhead-template/file", authenticate, requireLetterheadTemplateManager, (req, res) => {
-  if (!fs.existsSync(LETTERHEAD_TEMPLATE_PATH)) {
+  const templatePath = getLetterheadTemplatePath();
+  if (!fs.existsSync(templatePath)) {
     return res.status(404).json({ message: "Фирмалык бланктын PDF шаблону жүктөлө элек." });
   }
 
@@ -835,13 +856,26 @@ router.get("/letterhead-template/file", authenticate, requireLetterheadTemplateM
   });
 
   res.setHeader("Content-Disposition", 'inline; filename="letterhead-template.pdf"');
-  return res.sendFile(LETTERHEAD_TEMPLATE_PATH);
+  return res.sendFile(templatePath);
 });
 
-router.post("/letterhead-template", authenticate, requireLetterheadTemplateManager, uploadLetterheadTemplate.single("template"), (req, res) => {
+router.post(
+  "/letterhead-template",
+  authenticate,
+  requireLetterheadTemplateManager,
+  removeUploadOnFailure,
+  uploadLetterheadTemplate.single("template"),
+  async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "PDF-шаблонду жүктөңүз." });
   }
+
+  try {
+    await PDFDocument.load(fs.readFileSync(req.file.path));
+  } catch (_error) {
+    return res.status(400).json({ message: "Файл жарактуу PDF эмес же бузулган." });
+  }
+  fs.renameSync(req.file.path, path.join(CUSTOM_TEMPLATE_DIR, "letterhead-template.pdf"));
 
   appendAuditLog({
     userId: req.user.id,
@@ -852,7 +886,8 @@ router.post("/letterhead-template", authenticate, requireLetterheadTemplateManag
   });
 
   res.json({ template: getLetterheadTemplateInfo() });
-});
+  }
+);
 
 router.get("/:id", authenticate, (req, res) => {
   const db = readDb();
@@ -873,7 +908,7 @@ router.patch("/:id/status", authenticate, (req, res) => updateDocumentStatusWork
 
 router.post("/:id/approve", authenticate, (req, res) => {
   if (!["ADMIN", "DIRECTOR"].includes(req.user.roleCode)) {
-    return res.status(403).json({ message: "Р”РѕРєСѓРјРµРЅС‚С‚Рё Р±РµРєРёС‚ТЇТЇ РґРёСЂРµРєС‚РѕСЂРіРѕ Р¶Рµ Р°РґРјРёРЅРіРµ РіР°РЅР° Р¶РµС‚РєРёР»РёРєС‚ТЇТЇ." });
+    return res.status(403).json({ message: "Документти бекитүү директорго же админге гана жеткиликтүү." });
   }
 
   return updateDocumentStatusWorkflow(req, res, "approved");
@@ -881,7 +916,7 @@ router.post("/:id/approve", authenticate, (req, res) => {
 
 router.post("/:id/return", authenticate, (req, res) => {
   if (!["ADMIN", "DIRECTOR"].includes(req.user.roleCode)) {
-    return res.status(403).json({ message: "Р”РѕРєСѓРјРµРЅС‚С‚Рё РєР°Р№С‚Р°СЂСѓСѓ РґРёСЂРµРєС‚РѕСЂРіРѕ Р¶Рµ Р°РґРјРёРЅРіРµ РіР°РЅР° Р¶РµС‚РєРёР»РёРєС‚ТЇТЇ." });
+    return res.status(403).json({ message: "Документти кайтаруу директорго же админге гана жеткиликтүү." });
   }
 
   return updateDocumentStatusWorkflow(req, res, "returned");
@@ -892,14 +927,23 @@ router.post("/:id/generate-pdf", authenticate, (req, res) => {
   const document = db.documents.find((item) => item.id === req.params.id);
 
   if (!document) {
-    return res.status(404).json({ message: "Р”РѕРєСѓРјРµРЅС‚ С‚Р°Р±С‹Р»РіР°РЅ Р¶РѕРє." });
+    return res.status(404).json({ message: "Документ табылган жок." });
   }
 
   if (!canViewDocument(req.user, document)) {
-    return res.status(403).json({ message: "Р”РѕРєСѓРјРµРЅС‚С‚Рё РєУ©СЂТЇТЇРіУ© СѓРєСѓРє Р¶РµС‚РёС€СЃРёР·." });
+    return res.status(403).json({ message: "Документти көрүүгө укук жетишсиз." });
   }
 
   const existingOfficialPdf = getUsableOfficialPdf(document);
+  if (!existingOfficialPdf) {
+    if (!["ADMIN", "DIRECTOR"].includes(req.user.roleCode)) {
+      return res.status(403).json({ message: "Расмий PDFти директор же администратор гана түзө алат." });
+    }
+    if (!["approved", "completed"].includes(getDocumentStatus(document))) {
+      return res.status(400).json({ message: "Расмий PDF бекитилген документ үчүн гана түзүлөт." });
+    }
+  }
+
   if (existingOfficialPdf) {
     return res.json({
       document: decorateDocument(document, db.users),
@@ -956,30 +1000,37 @@ router.post("/:id/generate-pdf", authenticate, (req, res) => {
     })
     .catch((error) =>
       res.status(500).json({
-        message: error.message || "PDF generation failed.",
+        message: error.message || "PDF түзүүдө ката кетти.",
       })
     );
-
-  return res.status(501).json({
-    message: "РЈРЅРёРІРµСЂСЃР°Р»РґСѓСѓ PDF РіРµРЅРµСЂР°С†РёСЏСЃС‹ 5-СЌС‚Р°РїС‚Р° РёС€РєРµ Р°С€С‹СЂС‹Р»Р°С‚.",
-    document: decorateDocument(document, db.users),
-  });
 });
 
-router.post("/:id/files", authenticate, upload.single("file"), (req, res) => {
+function requireAttachPermission(req, res, next) {
+  const db = readDb();
+  const document = db.documents.find((item) => item.id === req.params.id);
+  if (!document) {
+    return res.status(404).json({ message: "Документ табылган жок." });
+  }
+  if (!canAttachDocumentFile(req.user, document)) {
+    return res.status(403).json({ message: "Документке файл кошууга укук жетишсиз." });
+  }
+  return next();
+}
+
+router.post("/:id/files", authenticate, requireAttachPermission, removeUploadOnFailure, upload.single("file"), (req, res) => {
   const db = readDb();
   const document = db.documents.find((item) => item.id === req.params.id);
 
   if (!document) {
-    return res.status(404).json({ message: "Р”РѕРєСѓРјРµРЅС‚ С‚Р°Р±С‹Р»РіР°РЅ Р¶РѕРє." });
+    return res.status(404).json({ message: "Документ табылган жок." });
   }
 
   if (!canAttachDocumentFile(req.user, document)) {
-    return res.status(403).json({ message: "Р”РѕРєСѓРјРµРЅС‚РєРµ С„Р°Р№Р» РєРѕС€СѓСѓРіР° СѓРєСѓРє Р¶РµС‚РёС€СЃРёР·." });
+    return res.status(403).json({ message: "Документке файл кошууга укук жетишсиз." });
   }
 
   if (!req.file) {
-    return res.status(400).json({ message: "Р”РѕРєСѓРјРµРЅС‚ С„Р°Р№Р»С‹РЅ Р¶ТЇРєС‚У©ТЈТЇР·." });
+    return res.status(400).json({ message: "Документ файлын жүктөңүз." });
   }
 
   const now = new Date().toISOString();
@@ -1005,7 +1056,7 @@ router.post("/:id/files", authenticate, upload.single("file"), (req, res) => {
   writeDb(db);
   appendAuditLog({
     userId: req.user.id,
-    action: "Р”РѕРєСѓРјРµРЅС‚РєРµ С„Р°Р№Р» РєРѕС€СѓР»РґСѓ",
+    action: "Документке файл кошулду",
     entityType: "document",
     entityId: document.id,
     req,
@@ -1146,6 +1197,29 @@ router.put("/:id/assignments/:assignmentId/status", authenticate, (req, res) => 
   res.json({ document: decorateDocument(document, db.users) });
 });
 
+function collectDocumentFileNames(document) {
+  const official = getOfficialPdfRecord(document);
+  return [
+    document.filePath,
+    document.officialDocument?.filePath,
+    official?.filePath,
+    ...(Array.isArray(document.files) ? document.files.map((file) => file.filePath) : []),
+  ]
+    .filter(Boolean)
+    .map((filePath) => path.basename(String(filePath)));
+}
+
+/** Deletes files from disk unless another document or request still points to them. */
+function removeUnreferencedFiles(db, fileNames) {
+  const stillReferenced = JSON.stringify([db.documents, db.requests]);
+  [...new Set(fileNames)].forEach((fileName) => {
+    if (!fileName || stillReferenced.includes(fileName)) {
+      return;
+    }
+    fs.rm(path.join(UPLOAD_DIR, fileName), { force: true }, () => {});
+  });
+}
+
 router.delete("/:id", authenticate, (req, res) => {
   const db = readDb();
   const documentIndex = db.documents.findIndex((item) => item.id === req.params.id);
@@ -1155,20 +1229,20 @@ router.delete("/:id", authenticate, (req, res) => {
   }
 
   const document = db.documents[documentIndex];
-  if (document.uploadedBy !== req.user.id && !["ADMIN", "DIRECTOR"].includes(req.user.roleCode)) {
+  const isManager = ["ADMIN", "DIRECTOR"].includes(req.user.roleCode);
+  if (document.uploadedBy !== req.user.id && !isManager) {
     return res.status(403).json({ message: "Документти өчүрүүгө укук жетишсиз." });
+  }
+
+  // Authors may remove their own drafts, but approved or official documents stay in the archive.
+  const isFinal = document.isOfficial || ["approved", "completed"].includes(getDocumentStatus(document));
+  if (isFinal && !isManager) {
+    return res.status(403).json({ message: "Бекитилген же расмий документти директор же администратор гана өчүрө алат." });
   }
 
   db.documents.splice(documentIndex, 1);
   writeDb(db);
-
-  if (document.filePath) {
-    const fileName = path.basename(document.filePath);
-    const filePath = path.join(UPLOAD_DIR, fileName);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  }
+  removeUnreferencedFiles(db, collectDocumentFileNames(document));
 
   appendAuditLog({
     userId: req.user.id,

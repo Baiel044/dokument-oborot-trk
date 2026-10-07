@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("../utils/config");
 const { readDb } = require("../data/store");
+const { isTokenCurrent } = require("../utils/sessions");
 
 function authenticate(req, res, next) {
   const header = req.headers.authorization || "";
@@ -15,7 +16,7 @@ function authenticate(req, res, next) {
     const db = readDb();
     const user = db.users.find((item) => item.id === payload.sub);
 
-    if (!user || user.status !== "active") {
+    if (!isTokenCurrent(payload, user)) {
       return res.status(401).json({ message: "Колдонуучу жеткиликсиз." });
     }
 

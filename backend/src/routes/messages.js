@@ -2,6 +2,7 @@ const express = require("express");
 const { authenticate } = require("../middleware/auth");
 const { readDb, writeDb, createId, appendAuditLog } = require("../data/store");
 const { DEPARTMENTS, getDepartmentTitle } = require("../utils/catalogs");
+const { normalizeMessageInput } = require("../utils/messageValidation");
 
 const router = express.Router();
 
@@ -77,12 +78,19 @@ router.get("/", authenticate, (req, res) => {
 });
 
 router.post("/", authenticate, (req, res) => {
-  const { receiverId, departmentId, subject, text, audienceType, chatScope } = req.body;
+  const { receiverId, departmentId, audienceType, chatScope } = req.body;
   const isGlobal = audienceType === "global" || chatScope === "global";
 
-  if (!text || (!receiverId && !departmentId && !isGlobal)) {
+  if (!receiverId && !departmentId && !isGlobal) {
     return res.status(400).json({ message: "Кабар тексти менен алуучуну көрсөтүңүз." });
   }
+
+  const input = normalizeMessageInput(req.body, "");
+  if (input.error) {
+    return res.status(400).json({ message: input.error });
+  }
+  const { text } = input;
+  const subject = input.subject || undefined;
 
   const db = readDb();
   const createdAt = new Date().toISOString();
@@ -193,11 +201,9 @@ router.get("/:id", authenticate, (req, res) => {
     return res.status(404).json({ message: "Кабар табылган жок." });
   }
 
+  // Private correspondence is visible only to its participants, administrators included.
   const canView =
-    message.audienceType === "global" ||
-    message.senderId === req.user.id ||
-    message.receiverId === req.user.id ||
-    ["ADMIN", "DIRECTOR"].includes(req.user.roleCode);
+    message.audienceType === "global" || message.senderId === req.user.id || message.receiverId === req.user.id;
 
   if (!canView) {
     return res.status(403).json({ message: "Укук жетишсиз." });

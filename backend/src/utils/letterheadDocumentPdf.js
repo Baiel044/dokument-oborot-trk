@@ -2,10 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
+const { getPdfFontCandidates } = require("./pdfFonts");
 const { UPLOAD_DIR } = require("./config");
 
-const LETTERHEAD_PDF = path.join(__dirname, "..", "..", "assets", "letterhead-template.pdf");
-const LETTERHEAD_IMAGE = path.join(__dirname, "..", "..", "assets", "letterhead.png");
+const { LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE, getLetterheadTemplatePath } = require("./letterhead");
 const TEMPLATE_CONTENT_START_Y = 420;
 const FALLBACK_CONTENT_TOP_MARGIN = 70;
 const PDF_BOTTOM_MARGIN = 50;
@@ -174,18 +174,10 @@ function transliterate(text) {
     .join("");
 }
 
-function getFontCandidates() {
-  const windowsDir = process.env.WINDIR || "C:\\Windows";
-  return [
-    path.join(windowsDir, "Fonts", "arial.ttf"),
-    path.join(windowsDir, "Fonts", "segoeui.ttf"),
-    path.join(windowsDir, "Fonts", "times.ttf"),
-  ];
-}
 
 async function embedPdfFont(pdfDoc) {
   pdfDoc.registerFontkit(fontkit);
-  const fontPath = getFontCandidates().find((candidate) => fs.existsSync(candidate));
+  const fontPath = getPdfFontCandidates().find((candidate) => fs.existsSync(candidate));
 
   if (fontPath) {
     const fontBytes = fs.readFileSync(fontPath);
@@ -207,10 +199,10 @@ async function generateLetterheadDocumentPdf({ title, categoryTitle, description
   let pdfDoc;
   let page;
   let templatePdf = null;
-  const hasTemplate = fs.existsSync(LETTERHEAD_PDF);
+  const hasTemplate = fs.existsSync(getLetterheadTemplatePath());
 
   if (hasTemplate) {
-    templatePdf = await PDFDocument.load(fs.readFileSync(LETTERHEAD_PDF));
+    templatePdf = await PDFDocument.load(fs.readFileSync(getLetterheadTemplatePath()));
     pdfDoc = await PDFDocument.create();
     page = await createOfficialPdfPage(pdfDoc, templatePdf);
   } else {
@@ -438,8 +430,8 @@ function getOfficialPdfOriginalTitle(document) {
 }
 
 async function generateOfficialDocumentPdf({ document, author, director }) {
-  const templatePdf = fs.existsSync(LETTERHEAD_PDF)
-    ? await PDFDocument.load(fs.readFileSync(LETTERHEAD_PDF))
+  const templatePdf = fs.existsSync(getLetterheadTemplatePath())
+    ? await PDFDocument.load(fs.readFileSync(getLetterheadTemplatePath()))
     : null;
   const pdfDoc = await PDFDocument.create();
   let page = await createOfficialPdfPage(pdfDoc, templatePdf);

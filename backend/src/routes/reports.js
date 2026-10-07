@@ -249,7 +249,11 @@ function buildSummary(db, user) {
 }
 
 function escapeCsvValue(value) {
-  const text = String(value ?? "");
+  let text = String(value ?? "");
+  // Spreadsheet apps execute cells starting with these characters as formulas (CSV injection).
+  if (/^[=+\-@\t\r]/.test(text)) {
+    text = `'${text}`;
+  }
   if (/[",\r\n;]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

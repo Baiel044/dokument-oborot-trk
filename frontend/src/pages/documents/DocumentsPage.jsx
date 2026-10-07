@@ -651,7 +651,8 @@ export function DocumentsPage() {
   }
 
   function canGenerateOfficialPdf(document) {
-    return !hasOfficialPdf(document) && getDocumentStatusGroup(document) === "approved";
+    // The server allows only the director or an administrator to issue an official PDF.
+    return canManageDocuments && !hasOfficialPdf(document) && getDocumentStatusGroup(document) === "approved";
   }
 
   async function openOfficialPdf(document) {
