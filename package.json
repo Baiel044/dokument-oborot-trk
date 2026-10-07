@@ -9,9 +9,11 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "render-build": "npm run install:all && npm run build",
-    "start": "npm --prefix backend run start"
+    "start": "npm --prefix backend run start",
+    "backup": "npm --prefix backend run backup",
+    "test": "npm --prefix backend test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   }
 }

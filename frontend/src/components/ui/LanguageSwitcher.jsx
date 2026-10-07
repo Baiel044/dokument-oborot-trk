@@ -1,3 +1,4 @@
+import { Globe } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 
 const options = [
@@ -9,17 +10,15 @@ export function LanguageSwitcher({ compact = false }) {
   const { language, setLanguage } = useLanguage();
 
   return (
-    <div className={`language-switcher${compact ? " language-switcher--compact" : ""}`}>
+    <div className={`lang-switcher${compact ? " lang-switcher--compact" : ""}`}>
+      <Globe className="lang-switcher-icon" size={14} aria-hidden="true" />
       {options.map((option) => (
         <button
           key={option.code}
           type="button"
-          className={
-            language === option.code
-              ? "language-switcher__button language-switcher__button--active"
-              : "language-switcher__button"
-          }
+          className={language === option.code ? "lang-switcher-btn active" : "lang-switcher-btn"}
           onClick={() => setLanguage(option.code)}
+          aria-pressed={language === option.code}
         >
           {option.label}
         </button>

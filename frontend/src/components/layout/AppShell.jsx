@@ -5,94 +5,52 @@ import { useLanguage } from "../../context/LanguageContext";
 import { api, buildAssetUrl, buildWebSocketUrl, getAuthToken } from "../../services/api";
 import { translateRole } from "../../utils/localization";
 import { LanguageSwitcher } from "../ui/LanguageSwitcher";
+import {
+  BarChart3,
+  Bell,
+  FileText,
+  FolderOpen,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Search,
+  ShieldCheck,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
 
-function NavIcon({ name }) {
-  const icons = {
-    home: (
-      <>
-        <path d="M3 11.5 12 4l9 7.5" />
-        <path d="M5.5 10.5V20h13v-9.5" />
-        <path d="M9.5 20v-6h5v6" />
-      </>
-    ),
-    messages: (
-      <>
-        <path d="M4 5h16v11H8l-4 4V5Z" />
-        <path d="M8 9h8" />
-        <path d="M8 12.5h5" />
-      </>
-    ),
-    requests: (
-      <>
-        <path d="M7 3h8l4 4v14H7V3Z" />
-        <path d="M15 3v5h4" />
-        <path d="M10 12h6" />
-        <path d="M10 16h6" />
-      </>
-    ),
-    documents: (
-      <>
-        <path d="M6 4h12v16H6V4Z" />
-        <path d="M9 8h6" />
-        <path d="M9 12h6" />
-        <path d="M9 16h4" />
-      </>
-    ),
-    notifications: (
-      <>
-        <path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
-        <path d="M10 21h4" />
-      </>
-    ),
-    profile: (
-      <>
-        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-        <path d="M4 21a8 8 0 0 1 16 0" />
-      </>
-    ),
-    users: (
-      <>
-        <path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-        <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
-        <path d="M17 10a3 3 0 1 0 0-6" />
-        <path d="M18 20h3.5a5 5 0 0 0-5-5" />
-      </>
-    ),
-    reports: (
-      <>
-        <path d="M4 19V5" />
-        <path d="M4 19h16" />
-        <path d="M8 16v-5" />
-        <path d="M12 16V8" />
-        <path d="M16 16v-3" />
-      </>
-    ),
-    admin: (
-      <>
-        <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z" />
-        <path d="M9.5 12 11 13.5 15 9.5" />
-      </>
-    ),
-  };
+const navIcons = {
+  home: LayoutDashboard,
+  messages: MessageSquare,
+  requests: FileText,
+  documents: FolderOpen,
+  notifications: Bell,
+  profile: UserRound,
+  users: Users,
+  reports: BarChart3,
+  admin: ShieldCheck,
+};
 
-  return (
-    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-      {icons[name] || icons.home}
-    </svg>
-  );
+function NavIcon({ name, size = 18 }) {
+  const Icon = navIcons[name] || LayoutDashboard;
+  return <Icon size={size} strokeWidth={2} aria-hidden="true" />;
 }
 
 const links = [
-  { to: "/", labelKey: "nav.home", icon: "home" },
-  { to: "/messages", labelKey: "nav.messages", icon: "messages" },
-  { to: "/requests", labelKey: "nav.requests", icon: "requests" },
-  { to: "/documents", labelKey: "nav.documents", icon: "documents" },
-  { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
-  { to: "/profile", labelKey: "nav.profile", icon: "profile" },
-  { to: "/reports", labelKey: "nav.reports", icon: "reports", roles: ["ADMIN", "DIRECTOR", "ACADEMIC_OFFICE", "HR", "ACCOUNTANT"] },
-  { to: "/users", labelKey: "nav.users", icon: "users", roles: ["ADMIN", "DIRECTOR", "HR"] },
-  { to: "/admin", labelKey: "nav.admin", icon: "admin", roles: ["ADMIN", "DIRECTOR"] },
+  { to: "/", labelKey: "nav.home", icon: "home", group: "main" },
+  { to: "/messages", labelKey: "nav.messages", icon: "messages", group: "main" },
+  { to: "/notifications", labelKey: "nav.notifications", icon: "notifications", group: "main" },
+  { to: "/requests", labelKey: "nav.requests", icon: "requests", group: "workflow" },
+  { to: "/documents", labelKey: "nav.documents", icon: "documents", group: "workflow" },
+  { to: "/reports", labelKey: "nav.reports", icon: "reports", group: "manage", roles: ["ADMIN", "DIRECTOR", "ACADEMIC_OFFICE", "HR", "ACCOUNTANT"] },
+  { to: "/users", labelKey: "nav.users", icon: "users", group: "manage", roles: ["ADMIN", "DIRECTOR", "HR"] },
+  { to: "/admin", labelKey: "nav.admin", icon: "admin", group: "manage", roles: ["ADMIN", "DIRECTOR"] },
+  { to: "/profile", labelKey: "nav.profile", icon: "profile", group: "manage" },
 ];
+
+const navGroups = ["main", "workflow", "manage"];
 
 const copyByLanguage = {
   ru: {
@@ -106,11 +64,11 @@ const copyByLanguage = {
     requests: "Заявление",
     documents: "Документ",
     users: "Пользователь",
-    theme: "Светлая тема",
     logout: "Выйти",
     openMenu: "Открыть меню",
     closeMenu: "Закрыть меню",
     fallbackUser: "Пользователь",
+    groups: { main: "Главное", workflow: "Документооборот", manage: "Управление" },
     nav: {
       "nav.home": "Главная",
       "nav.messages": "Сообщения",
@@ -134,11 +92,11 @@ const copyByLanguage = {
     requests: "Арыз",
     documents: "Документ",
     users: "Колдонуучу",
-    theme: "Жарык тема",
     logout: "Чыгуу",
     openMenu: "Менюну ачуу",
     closeMenu: "Менюну жабуу",
     fallbackUser: "Колдонуучу",
+    groups: { main: "Негизги", workflow: "Документ жүгүртүү", manage: "Башкаруу" },
     nav: {
       "nav.home": "Башкы бет",
       "nav.messages": "Кабарлар",
@@ -284,7 +242,7 @@ export function AppShell() {
 
   const displayRoleTitle = translateRole(user.roleCode || user.roleTitle, language) || user.position || user.roleTitle || user.roleCode;
   const avatarSrc = avatarLoadFailed ? "" : buildAssetUrl(user.avatarPath);
-  const displayUserName = readableText(user.fullName, "Бактыбек уулу Байэл") || user.username || shellCopy.fallbackUser;
+  const displayUserName = readableText(user.fullName, "") || user.username || shellCopy.fallbackUser;
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -438,80 +396,95 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  function renderBadge(path) {
+    const count =
+      path === "/messages" ? badges.unreadMessages : path === "/notifications" ? badges.unreadNotifications : 0;
+    return count > 0 ? <span className="sidebar-link-badge">{count > 99 ? "99+" : count}</span> : null;
+  }
+
   return (
-    <div className={isSidebarOpen ? "app-shell app-shell--menu-open" : "app-shell"}>
-      <button
-        className="sidebar-backdrop"
-        type="button"
-        aria-label={shellCopy.closeMenu}
-        onClick={() => setIsSidebarOpen(false)}
-      />
-      <aside className="sidebar">
-        <div className="brand-block">
-          <span className="brand-block__mark">
+    <div className="app-shell">
+      {isSidebarOpen ? (
+        <button
+          className="sidebar-mobile-overlay"
+          type="button"
+          aria-label={shellCopy.closeMenu}
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      ) : null}
+      <aside className={isSidebarOpen ? "sidebar mobile-open" : "sidebar"}>
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-mark">
             {brandLogoLoadFailed ? (
-              <span className="brand-block__fallback" aria-label={shellCopy.brandTitle}>
-                ТРК
-              </span>
+              "ТРК"
             ) : (
-              <img
-                className="brand-block__logo"
-                src="/logo/college-logo.png"
-                alt={shellCopy.brandTitle}
-                onError={() => setBrandLogoLoadFailed(true)}
-              />
+              <img src="/logo/college-logo.png" alt="" onError={() => setBrandLogoLoadFailed(true)} />
             )}
           </span>
-          <span>
-            <strong>{shellCopy.brandTitle}</strong>
-            <small>{shellCopy.brandDescription}</small>
+          <span className="sidebar-brand-text">
+            <span className="sidebar-brand-name">{shellCopy.brandTitle}</span>
+            <span className="sidebar-brand-caption">{shellCopy.brandDescription}</span>
           </span>
+          <button
+            className="sidebar-close-btn"
+            type="button"
+            aria-label={shellCopy.closeMenu}
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <nav className="sidebar__nav">
-          {visibleLinks.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => (isActive ? "nav-link nav-link--active" : "nav-link")}
-              end={item.to === "/"}
-              onClick={() => setIsSidebarOpen(false)}
-            >
-              <span className="nav-link__label">
-                <NavIcon name={item.icon} />
-                {shellCopy.nav[item.labelKey]}
-              </span>
-              {item.to === "/messages" && badges.unreadMessages > 0 ? (
-                <span className="nav-link__badge">{badges.unreadMessages}</span>
-              ) : null}
-              {item.to === "/notifications" && badges.unreadNotifications > 0 ? (
-                <span className="nav-link__badge">{badges.unreadNotifications}</span>
-              ) : null}
-            </NavLink>
-          ))}
+        <nav className="sidebar-nav">
+          {navGroups.map((group, index) => {
+            const groupLinks = visibleLinks.filter((item) => item.group === group);
+            if (!groupLinks.length) {
+              return null;
+            }
+
+            return (
+              <div className="sidebar-group" key={group}>
+                {index > 0 ? <div className="sidebar-group-divider" /> : null}
+                <span className="sidebar-group-label">{shellCopy.groups[group]}</span>
+                {groupLinks.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) => (isActive ? "sidebar-link active" : "sidebar-link")}
+                    end={item.to === "/"}
+                    onClick={() => setIsSidebarOpen(false)}
+                  >
+                    <NavIcon name={item.icon} />
+                    <span className="sidebar-link-label">{shellCopy.nav[item.labelKey]}</span>
+                    {renderBadge(item.to)}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
-        <div className="sidebar__footer">
-          <button className="sidebar__logout" onClick={logout} type="button">
-            {shellCopy.logout}
+        <div className="sidebar-footer">
+          <button className="sidebar-link sidebar-logout" onClick={logout} type="button">
+            <LogOut size={18} aria-hidden="true" />
+            <span className="sidebar-link-label">{shellCopy.logout}</span>
           </button>
         </div>
       </aside>
 
-      <main className="content-area">
-        <header className="topbar">
+      <div className="app-main">
+        <header className="header">
           <button
-            className="mobile-menu-button"
+            className="header-icon-btn header-mobile-toggle"
             type="button"
             aria-label={shellCopy.openMenu}
             aria-expanded={isSidebarOpen}
             onClick={() => setIsSidebarOpen((current) => !current)}
           >
-            <span />
-            <span />
-            <span />
+            <Menu size={20} />
           </button>
-          <div className="topbar__search">
+          <div className="header-search">
+            <Search size={18} aria-hidden="true" />
             <input
               aria-label={shellCopy.search}
               placeholder={shellCopy.search}
@@ -522,52 +495,59 @@ export function AppShell() {
               }}
               onFocus={() => setIsSearchOpen(true)}
             />
+            {searchQuery ? (
+              <button className="header-search-clear" type="button" aria-label={shellCopy.closeMenu} onClick={closeSearch}>
+                <X size={14} />
+              </button>
+            ) : null}
             {isSearchOpen && searchQuery.trim().length >= 2 ? (
-              <div className="search-popover">
-                {isSearching ? <p className="search-popover__state">{shellCopy.searchLoading}</p> : null}
+              <div className="card header-search-results">
+                {isSearching ? <p className="header-search-empty">{shellCopy.searchLoading}</p> : null}
                 {!isSearching && searchResults.length === 0 ? (
-                  <p className="search-popover__state">{shellCopy.searchEmpty}</p>
+                  <p className="header-search-empty">{shellCopy.searchEmpty}</p>
                 ) : null}
                 {!isSearching
                   ? searchResults.map((item) => (
-                      <Link
-                        className="search-result"
-                        key={item.id}
-                        to={item.to}
-                        onClick={closeSearch}
-                      >
-                        <span>{item.type}</span>
-                        <strong>{item.title}</strong>
-                        <p>{item.text}</p>
+                      <Link className="header-search-item" key={item.id} to={item.to} onClick={closeSearch}>
+                        <span className="header-search-item-type">{item.type}</span>
+                        <span className="header-search-item-name">{item.title}</span>
+                        {item.text ? <span className="header-search-item-meta">{item.text}</span> : null}
                       </Link>
                     ))
                   : null}
               </div>
             ) : null}
           </div>
-          <div className="topbar__actions">
+          <div className="spacer" />
+          <div className="header-actions">
             <LanguageSwitcher compact />
-            <Link className="topbar__notification" to="/notifications" aria-label={shellCopy.notifications}>
-              <NavIcon name="notifications" />
-              {badges.unreadNotifications > 0 ? <span>{badges.unreadNotifications}</span> : null}
+            <Link className="header-icon-btn" to="/notifications" aria-label={shellCopy.notifications}>
+              <Bell size={18} />
+              {badges.unreadNotifications > 0 ? (
+                <span className="header-icon-count">
+                  {badges.unreadNotifications > 99 ? "99+" : badges.unreadNotifications}
+                </span>
+              ) : null}
             </Link>
-            <Link className="topbar__user" to="/profile">
-              <span className={avatarSrc ? "topbar__avatar topbar__avatar--image" : "topbar__avatar"}>
+            <Link className="header-profile" to="/profile">
+              <span className="avatar">
                 {avatarSrc ? (
                   <img src={avatarSrc} alt="" onError={() => setAvatarLoadFailed(true)} />
                 ) : (
                   displayUserName.charAt(0)
                 )}
               </span>
-              <span>
-                <strong>{displayUserName}</strong>
-                <small>{displayRoleTitle}</small>
+              <span className="header-profile-text">
+                <span className="header-profile-name">{displayUserName}</span>
+                <span className="header-profile-role">{displayRoleTitle}</span>
               </span>
             </Link>
           </div>
         </header>
-        <Outlet />
-      </main>
+        <main className="app-content route-transition" key={location.pathname}>
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

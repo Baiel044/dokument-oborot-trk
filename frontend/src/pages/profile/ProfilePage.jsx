@@ -217,33 +217,8 @@ export function ProfilePage() {
           ) : null}
         </div>
         {feedback.text ? <p className={`form-alert form-alert--${feedback.type}`}>{feedback.text}</p> : null}
-        <div
-          className="grid-form__full"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "18px",
-            marginBottom: "18px",
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "84px",
-              height: "84px",
-              borderRadius: "50%",
-              overflow: "hidden",
-              color: "#ffffff",
-              background: "linear-gradient(135deg, #1f2a5c, #7557f6)",
-              boxShadow: "0 16px 32px rgba(32, 43, 88, 0.18)",
-              fontSize: "34px",
-              fontWeight: 900,
-              flex: "0 0 auto",
-            }}
-          >
+        <div className="profile-hero">
+          <span className="profile-avatar">
             {avatarSrc ? (
               <img
                 src={avatarSrc}
@@ -253,7 +228,7 @@ export function ProfilePage() {
                     setAvatarLoadFailed(true);
                   }
                 }}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+               
               />
             ) : (
               <svg
@@ -272,10 +247,10 @@ export function ProfilePage() {
               </svg>
             )}
           </span>
-          <div style={{ display: "grid", gap: "10px", minWidth: 0 }}>
+          <div className="profile-hero-text">
             <div>
               <strong>{avatarLabels.title}</strong>
-              <p className="muted-text" style={{ margin: "4px 0 0" }}>
+              <p className="muted-text">
                 {avatarLabels.hint}
               </p>
             </div>

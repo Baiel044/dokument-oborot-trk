@@ -831,7 +831,7 @@ export function RequestsPage() {
               item.documentTitle || translateRequestType(item.type, language),
               filterLabels.defaultTitle
             );
-            const readableAuthor = readableText(item.authorName, "Бактыбек уулу Байэл");
+            const readableAuthor = readableText(item.authorName, filterLabels.employee);
             const readableReason = readableText(
               item.reason,
               filterLabels.defaultReason
