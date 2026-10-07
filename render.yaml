@@ -7,7 +7,7 @@ services:
     startCommand: npm run start
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 22
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN

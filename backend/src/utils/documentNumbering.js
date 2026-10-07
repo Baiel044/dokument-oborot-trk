@@ -1,3 +1,5 @@
+const { reserveCounterValue } = require("../data/store");
+
 const DOCUMENT_TYPE_CODES = {
   statements: 1,
   orders: 2,
@@ -53,8 +55,12 @@ function createDocumentNumber(db, category) {
   const documentTypeCode = getDocumentTypeCode(category);
   const counters = normalizeStoredCounters(db);
   const counterKey = String(documentTypeCode);
-  const currentSequence = Math.max(Number(counters[counterKey] || 0), getHighestExistingSequence(db, documentTypeCode));
-  const sequenceNumber = currentSequence + 1;
+  // Reserved in the database right away, so parallel requests never share a number.
+  const sequenceNumber = reserveCounterValue(
+    "documentCounters",
+    counterKey,
+    Math.max(Number(counters[counterKey] || 0), getHighestExistingSequence(db, documentTypeCode))
+  );
 
   counters[counterKey] = sequenceNumber;
 
