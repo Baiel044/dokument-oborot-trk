@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { FileCheck2, MessagesSquare, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, FileCheck2, MessagesSquare, ShieldCheck } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { LanguageSwitcher } from "../ui/LanguageSwitcher";
 
@@ -16,6 +17,7 @@ const copyByLanguage = {
       { icon: MessagesSquare, title: "Внутренняя связь", text: "Сообщения и уведомления в реальном времени" },
     ],
     footer: "Официальная система электронного документооборота",
+    home: "На главную",
   },
   ky: {
     brand: "EduFlow TRK",
@@ -29,6 +31,7 @@ const copyByLanguage = {
       { icon: MessagesSquare, title: "Ички байланыш", text: "Кабарлар жана билдирмелер реалдуу убакытта" },
     ],
     footer: "Электрондук документ жүгүртүүнүн расмий системасы",
+    home: "Башкы бетке",
   },
 };
 
@@ -73,6 +76,10 @@ export function AuthLayout({ children, wide = false }) {
 
       <main className="auth-main">
         <div className="auth-main-top">
+          <Link to="/" className="btn btn-ghost btn-sm auth-home-link">
+            <ArrowLeft size={16} />
+            {copy.home}
+          </Link>
           <LanguageSwitcher compact />
         </div>
         <div className={wide ? "auth-panel auth-panel--wide animate-in" : "auth-panel animate-in"}>{children}</div>

@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./router/ProtectedRoute";
 import { AppShell } from "./components/layout/AppShell";
 import { useAuth } from "./context/AuthContext";
+import { useLanguage } from "./context/LanguageContext";
+import { LandingPage } from "./pages/landing/LandingPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
@@ -15,16 +17,28 @@ import { ReportsPage } from "./pages/reports/ReportsPage";
 import { AdminPage } from "./pages/admin/AdminPage";
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const { t } = useLanguage();
+
+  // Guests see the public landing page at "/", signed-in users see the dashboard there.
+  let homeElement = <AppShell />;
+  if (loading) {
+    homeElement = <div className="page-loader">{t("route.forbiddenLoading")}</div>;
+  } else if (!user) {
+    homeElement = <LandingPage />;
+  }
 
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
 
+      <Route path="/" element={homeElement}>
+        <Route index element={<DashboardPage />} />
+      </Route>
+
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
-          <Route path="/" element={<DashboardPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
@@ -51,7 +65,7 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
