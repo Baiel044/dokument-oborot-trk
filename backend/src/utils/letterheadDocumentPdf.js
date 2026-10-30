@@ -1,14 +1,63 @@
 const fs = require("fs");
 const path = require("path");
-const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
+const { PDFArray, PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
 const { getPdfFontCandidates } = require("./pdfFonts");
 const { UPLOAD_DIR } = require("./config");
 
 const { LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE, getLetterheadTemplatePath } = require("./letterhead");
+// Used when the separator line under the letterhead cannot be found in the template.
 const TEMPLATE_CONTENT_START_Y = 420;
+// Distance from the letterhead separator line to the first line of text.
+const TEMPLATE_LINE_GAP = 28;
 const FALLBACK_CONTENT_TOP_MARGIN = 70;
 const PDF_BOTTOM_MARGIN = 50;
+
+function readPageContent(page) {
+  const contents = page.node.Contents();
+  if (!contents) {
+    return "";
+  }
+
+  const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+  return refs
+    .map((ref) => {
+      const stream = page.doc.context.lookup(ref);
+      if (!(stream instanceof PDFRawStream)) {
+        return "";
+      }
+      return Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1");
+    })
+    .join("\n");
+}
+
+/**
+ * Finds the horizontal separator line under the letterhead (the lowest wide line
+ * in the top half of the page) and returns the Y where the text should start.
+ */
+function getTemplateContentStartY(page) {
+  let content;
+  try {
+    content = readPageContent(page);
+  } catch {
+    return TEMPLATE_CONTENT_START_Y;
+  }
+
+  const { width, height } = page.getSize();
+  const lineRegex = /(-?[\d.]+)\s+(-?[\d.]+)\s+m\s+(-?[\d.]+)\s+(-?[\d.]+)\s+l/g;
+  let separatorY = null;
+
+  for (const match of content.matchAll(lineRegex)) {
+    const [x1, y1, x2, y2] = match.slice(1, 5).map(Number);
+    const isHorizontal = Math.abs(y1 - y2) < 1;
+    const isWide = Math.abs(x2 - x1) > width / 2;
+    if (isHorizontal && isWide && y1 > height / 2 && (separatorY === null || y1 < separatorY)) {
+      separatorY = y1;
+    }
+  }
+
+  return separatorY === null ? TEMPLATE_CONTENT_START_Y : separatorY - TEMPLATE_LINE_GAP;
+}
 
 function buildSafePdfName(title, fallbackName = "letterhead-document") {
   const safeBaseName = String(title || "letterhead-document")
@@ -215,7 +264,8 @@ async function generateLetterheadDocumentPdf({ title, categoryTitle, description
   const margin = 52;
   let pageWidth = page.getWidth();
   let contentWidth = pageWidth - margin * 2;
-  let cursorY = hasTemplate ? TEMPLATE_CONTENT_START_Y : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
+  const templateStartY = hasTemplate ? getTemplateContentStartY(page) : null;
+  let cursorY = hasTemplate ? templateStartY : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
 
   if (!hasTemplate && fs.existsSync(LETTERHEAD_IMAGE)) {
     const letterheadImage = await pdfDoc.embedPng(fs.readFileSync(LETTERHEAD_IMAGE));
@@ -259,7 +309,7 @@ async function generateLetterheadDocumentPdf({ title, categoryTitle, description
     page = hasTemplate ? await createOfficialPdfPage(pdfDoc, templatePdf) : pdfDoc.addPage([595.28, 841.89]);
     pageWidth = page.getWidth();
     contentWidth = pageWidth - margin * 2;
-    cursorY = hasTemplate ? TEMPLATE_CONTENT_START_Y : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
+    cursorY = hasTemplate ? templateStartY : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
     drawFallbackFrame();
   }
 
@@ -441,7 +491,8 @@ async function generateOfficialDocumentPdf({ document, author, director }) {
   const bottomMargin = 50;
   let pageWidth = page.getWidth();
   let contentWidth = pageWidth - margin * 2;
-  let cursorY = templatePdf ? TEMPLATE_CONTENT_START_Y : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
+  const templateStartY = templatePdf ? getTemplateContentStartY(page) : null;
+  let cursorY = templatePdf ? templateStartY : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
 
   if (!templatePdf && fs.existsSync(LETTERHEAD_IMAGE)) {
     const letterheadImage = await pdfDoc.embedPng(fs.readFileSync(LETTERHEAD_IMAGE));
@@ -479,7 +530,7 @@ async function generateOfficialDocumentPdf({ document, author, director }) {
     page = await createOfficialPdfPage(pdfDoc, templatePdf);
     pageWidth = page.getWidth();
     contentWidth = pageWidth - margin * 2;
-    cursorY = templatePdf ? TEMPLATE_CONTENT_START_Y : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
+    cursorY = templatePdf ? templateStartY : page.getHeight() - FALLBACK_CONTENT_TOP_MARGIN;
     drawFallbackFrame();
   }
 
