@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Link } from "react-router-dom";
+import { MotionConfig, motion, useScroll, useSpring } from "motion/react";
 import {
   ArrowRight,
   BarChart3,
@@ -24,6 +25,25 @@ import {
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { LanguageSwitcher } from "../../components/ui/LanguageSwitcher";
+
+// three.js is large, so the 3D background loads separately and only on this page.
+const HeroScene = lazy(() => import("./HeroScene"));
+
+const EASE_OUT = [0.16, 1, 0.3, 1];
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT } },
+};
+
+const stagger = (delayChildren = 0, staggerChildren = 0.08) => ({
+  hidden: {},
+  visible: { transition: { delayChildren, staggerChildren } },
+});
+
+const inView = { initial: "hidden", whileInView: "visible", viewport: { once: true, amount: 0.2 } };
+
+const cardHover = { y: -6, boxShadow: "0 16px 32px rgba(16, 24, 40, 0.1)" };
 
 const copyByLanguage = {
   ky: {
@@ -194,8 +214,19 @@ function Brand({ copy }) {
 
 function DocumentPreview({ preview }) {
   return (
-    <div className="landing-preview" aria-hidden="true">
-      <div className="landing-sheet">
+    <motion.div
+      className="landing-preview"
+      aria-hidden="true"
+      initial={{ opacity: 0, y: 40, rotate: 4 }}
+      animate={{ opacity: 1, y: 0, rotate: 0 }}
+      transition={{ duration: 0.9, delay: 0.25, ease: EASE_OUT }}
+    >
+      <motion.div
+        className="landing-sheet"
+        style={{ rotate: -1.5 }}
+        animate={{ y: [0, -10, 0] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+      >
         <div className="landing-sheet-head">
           <span className="landing-sheet-lines">
             <i />
@@ -209,46 +240,91 @@ function DocumentPreview({ preview }) {
             <i />
           </span>
         </div>
-        <div className="landing-sheet-rule" />
-        <dl className="landing-sheet-fields">
-          <div>
+        <motion.div
+          className="landing-sheet-rule"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.7, delay: 0.7, ease: EASE_OUT }}
+        />
+        <motion.dl className="landing-sheet-fields" initial="hidden" animate="visible" variants={stagger(0.9, 0.15)}>
+          <motion.div variants={fadeUp}>
             <dt>{preview.type}</dt>
             <dd>{preview.typeValue}</dd>
-          </div>
-          <div>
+          </motion.div>
+          <motion.div variants={fadeUp}>
             <dt>{preview.number}</dt>
             <dd>№1/4</dd>
-          </div>
-          <div>
+          </motion.div>
+          <motion.div variants={fadeUp}>
             <dt>{preview.topic}</dt>
             <dd>{preview.topicValue}</dd>
-          </div>
-        </dl>
-        <span className="landing-sheet-stamp">
+          </motion.div>
+        </motion.dl>
+        <motion.span
+          className="landing-sheet-stamp"
+          initial={{ opacity: 0, scale: 2.2, rotate: -20 }}
+          animate={{ opacity: 1, scale: 1, rotate: -6 }}
+          transition={{ type: "spring", stiffness: 260, damping: 14, delay: 2.3 }}
+        >
           <Stamp size={16} />
           {preview.stamp}
-        </span>
-      </div>
+        </motion.span>
+      </motion.div>
 
-      <ol className="landing-route">
+      <motion.ol className="landing-route" initial="hidden" animate="visible" variants={stagger(1.2, 0.35)}>
         {preview.steps.map((step, index) => (
-          <li key={step} className={index === preview.steps.length - 1 ? "is-done" : ""}>
+          <motion.li
+            key={step}
+            className={index === preview.steps.length - 1 ? "is-done" : ""}
+            variants={{
+              hidden: { opacity: 0, x: -16 },
+              visible: { opacity: 1, x: 0, transition: { duration: 0.4, ease: EASE_OUT } },
+            }}
+          >
             <CheckCircle2 size={16} />
             {step}
-          </li>
+          </motion.li>
         ))}
-      </ol>
-    </div>
+      </motion.ol>
+    </motion.div>
   );
 }
 
 function SectionHead({ title, subtitle }) {
   return (
-    <div className="landing-section-head">
-      <h2>{title}</h2>
-      {subtitle ? <p>{subtitle}</p> : null}
-    </div>
+    <motion.div className="landing-section-head" {...inView} variants={stagger(0, 0.1)}>
+      <motion.h2 variants={fadeUp}>{title}</motion.h2>
+      {subtitle ? <motion.p variants={fadeUp}>{subtitle}</motion.p> : null}
+    </motion.div>
   );
+}
+
+function CardGrid({ items, className }) {
+  return (
+    <motion.div className={`landing-grid ${className}`} {...inView} variants={stagger(0, 0.07)}>
+      {items.map(({ icon: Icon, title, text }) => (
+        <motion.article className="landing-card" key={title} variants={fadeUp} whileHover={cardHover}>
+          <motion.span
+            className="landing-card-icon"
+            variants={{
+              hidden: { scale: 0.4, rotate: -30 },
+              visible: { scale: 1, rotate: 0, transition: { type: "spring", stiffness: 300, damping: 15 } },
+            }}
+          >
+            <Icon size={20} />
+          </motion.span>
+          <h3>{title}</h3>
+          <p>{text}</p>
+        </motion.article>
+      ))}
+    </motion.div>
+  );
+}
+
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, restDelta: 0.001 });
+  return <motion.div className="landing-progress" style={{ scaleX }} />;
 }
 
 export function LandingPage() {
@@ -256,176 +332,198 @@ export function LandingPage() {
   const copy = copyByLanguage[language] || copyByLanguage.ky;
 
   return (
-    <div className="landing">
-      <header className="landing-header">
-        <div className="landing-container landing-header-inner">
-          <Brand copy={copy} />
-          <nav className="landing-nav">
-            {Object.entries(copy.nav).map(([id, label]) => (
-              <a key={id} href={`#${id}`}>
-                {label}
-              </a>
-            ))}
-          </nav>
-          <div className="landing-header-actions">
-            <LanguageSwitcher compact />
-            <Link to="/login" className="btn btn-primary btn-sm">
-              <LogIn size={16} />
-              {copy.login}
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      <main>
-        <section className="landing-hero">
-          <div className="landing-container landing-hero-inner">
-            <div className="landing-hero-copy animate-in">
-              <span className="landing-badge">
-                <ShieldCheck size={14} />
-                {copy.heroBadge}
-              </span>
-              <h1>{copy.heroTitle}</h1>
-              <p>{copy.heroSubtitle}</p>
-              <div className="landing-hero-actions">
-                <Link to="/login" className="btn btn-primary btn-lg">
-                  {copy.heroPrimary}
-                  <ArrowRight size={18} />
-                </Link>
-                <a href="#how" className="btn btn-secondary btn-lg">
-                  {copy.heroSecondary}
+    <MotionConfig reducedMotion="user">
+      <div className="landing">
+        <ScrollProgress />
+        <motion.header
+          className="landing-header"
+          initial={{ y: -24, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: EASE_OUT }}
+        >
+          <div className="landing-container landing-header-inner">
+            <Brand copy={copy} />
+            <nav className="landing-nav">
+              {Object.entries(copy.nav).map(([id, label]) => (
+                <a key={id} href={`#${id}`}>
+                  {label}
                 </a>
-              </div>
-            </div>
-            <DocumentPreview preview={copy.preview} />
-          </div>
-        </section>
-
-        <section id="why" className="landing-section">
-          <div className="landing-container">
-            <SectionHead title={copy.whyTitle} subtitle={copy.whySubtitle} />
-            <div className="landing-grid landing-grid--4">
-              {copy.why.map(({ icon: Icon, title, text }) => (
-                <article className="landing-card" key={title}>
-                  <span className="landing-card-icon">
-                    <Icon size={20} />
-                  </span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </article>
               ))}
+            </nav>
+            <div className="landing-header-actions">
+              <LanguageSwitcher compact />
+              <Link to="/login" className="btn btn-primary btn-sm">
+                <LogIn size={16} />
+                {copy.login}
+              </Link>
             </div>
           </div>
-        </section>
+        </motion.header>
 
-        <section id="features" className="landing-section landing-section--muted">
-          <div className="landing-container">
-            <SectionHead title={copy.featuresTitle} subtitle={copy.featuresSubtitle} />
-            <div className="landing-grid landing-grid--4">
-              {copy.features.map(({ icon: Icon, title, text }) => (
-                <article className="landing-card" key={title}>
-                  <span className="landing-card-icon">
-                    <Icon size={20} />
-                  </span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </article>
-              ))}
+        <main>
+          <section className="landing-hero">
+            <Suspense fallback={null}>
+              <HeroScene />
+            </Suspense>
+            <div className="landing-container landing-hero-inner">
+              <motion.div className="landing-hero-copy" initial="hidden" animate="visible" variants={stagger(0.1, 0.12)}>
+                <motion.span className="landing-badge" variants={fadeUp}>
+                  <ShieldCheck size={14} />
+                  {copy.heroBadge}
+                </motion.span>
+                <motion.h1 variants={fadeUp}>{copy.heroTitle}</motion.h1>
+                <motion.p variants={fadeUp}>{copy.heroSubtitle}</motion.p>
+                <motion.div className="landing-hero-actions" variants={fadeUp}>
+                  <motion.span whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
+                    <Link to="/login" className="btn btn-primary btn-lg landing-hero-primary">
+                      {copy.heroPrimary}
+                      <ArrowRight size={18} />
+                    </Link>
+                  </motion.span>
+                  <motion.span whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
+                    <a href="#how" className="btn btn-secondary btn-lg">
+                      {copy.heroSecondary}
+                    </a>
+                  </motion.span>
+                </motion.div>
+              </motion.div>
+              <DocumentPreview preview={copy.preview} />
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section id="how" className="landing-section">
-          <div className="landing-container">
-            <SectionHead title={copy.howTitle} subtitle={copy.howSubtitle} />
-            <ol className="landing-steps">
-              {copy.steps.map(({ title, text }, index) => (
-                <li key={title}>
-                  <span className="landing-step-number">{index + 1}</span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
+          <section id="why" className="landing-section">
+            <div className="landing-container">
+              <SectionHead title={copy.whyTitle} subtitle={copy.whySubtitle} />
+              <CardGrid items={copy.why} className="landing-grid--4" />
+            </div>
+          </section>
 
-        <section id="roles" className="landing-section landing-section--muted">
-          <div className="landing-container">
-            <SectionHead title={copy.rolesTitle} subtitle={copy.rolesSubtitle} />
-            <div className="landing-grid landing-grid--3">
-              {copy.roles.map(({ title, text }) => (
-                <article className="landing-role" key={title}>
-                  <FileText size={18} />
-                  <div>
+          <section id="features" className="landing-section landing-section--muted">
+            <div className="landing-container">
+              <SectionHead title={copy.featuresTitle} subtitle={copy.featuresSubtitle} />
+              <CardGrid items={copy.features} className="landing-grid--4" />
+            </div>
+          </section>
+
+          <section id="how" className="landing-section">
+            <div className="landing-container">
+              <SectionHead title={copy.howTitle} subtitle={copy.howSubtitle} />
+              <motion.ol className="landing-steps" {...inView} variants={stagger(0, 0.25)}>
+                {copy.steps.map(({ title, text }, index) => (
+                  <motion.li key={title} variants={fadeUp}>
+                    <motion.span
+                      className="landing-step-number"
+                      variants={{
+                        hidden: { scale: 0 },
+                        visible: { scale: 1, transition: { type: "spring", stiffness: 320, damping: 14 } },
+                      }}
+                    >
+                      {index + 1}
+                    </motion.span>
+                    {index < copy.steps.length - 1 ? (
+                      <motion.span
+                        className="landing-step-line"
+                        variants={{
+                          hidden: { scaleX: 0 },
+                          visible: { scaleX: 1, transition: { duration: 0.6, delay: 0.2, ease: EASE_OUT } },
+                        }}
+                      />
+                    ) : null}
                     <h3>{title}</h3>
                     <p>{text}</p>
-                  </div>
-                </article>
-              ))}
+                  </motion.li>
+                ))}
+              </motion.ol>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section id="faq" className="landing-section">
-          <div className="landing-container landing-faq-wrap">
-            <SectionHead title={copy.faqTitle} />
-            <div className="landing-faq">
-              {copy.faq.map(({ q, a }) => (
-                <details key={q}>
-                  <summary>{q}</summary>
-                  <p>{a}</p>
-                </details>
-              ))}
+          <section id="roles" className="landing-section landing-section--muted">
+            <div className="landing-container">
+              <SectionHead title={copy.rolesTitle} subtitle={copy.rolesSubtitle} />
+              <motion.div className="landing-grid landing-grid--3" {...inView} variants={stagger(0, 0.07)}>
+                {copy.roles.map(({ title, text }) => (
+                  <motion.article className="landing-role" key={title} variants={fadeUp} whileHover={cardHover}>
+                    <FileText size={18} />
+                    <div>
+                      <h3>{title}</h3>
+                      <p>{text}</p>
+                    </div>
+                  </motion.article>
+                ))}
+              </motion.div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="landing-section">
-          <div className="landing-container">
-            <div className="landing-cta">
-              <div>
-                <h2>{copy.ctaTitle}</h2>
-                <p>{copy.ctaText}</p>
-              </div>
-              <div className="landing-hero-actions">
-                <Link to="/login" className="btn btn-lg landing-cta-primary">
-                  <LogIn size={18} />
-                  {copy.login}
-                </Link>
-                <Link to="/register" className="btn btn-lg landing-cta-secondary">
-                  <UserPlus size={18} />
-                  {copy.register}
-                </Link>
-              </div>
+          <section id="faq" className="landing-section">
+            <div className="landing-container landing-faq-wrap">
+              <SectionHead title={copy.faqTitle} />
+              <motion.div className="landing-faq" {...inView} variants={stagger(0, 0.06)}>
+                {copy.faq.map(({ q, a }) => (
+                  <motion.details key={q} variants={fadeUp}>
+                    <summary>{q}</summary>
+                    <p>{a}</p>
+                  </motion.details>
+                ))}
+              </motion.div>
             </div>
-          </div>
-        </section>
-      </main>
+          </section>
 
-      <footer className="landing-footer">
-        <div className="landing-container landing-footer-inner">
-          <div>
-            <Brand copy={copy} />
-            <p>{copy.footer}</p>
+          <section className="landing-section">
+            <div className="landing-container">
+              <motion.div
+                className="landing-cta"
+                initial={{ opacity: 0, scale: 0.94, y: 30 }}
+                whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.4 }}
+                transition={{ duration: 0.7, ease: EASE_OUT }}
+              >
+                <div>
+                  <h2>{copy.ctaTitle}</h2>
+                  <p>{copy.ctaText}</p>
+                </div>
+                <div className="landing-hero-actions">
+                  <motion.span whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+                    <Link to="/login" className="btn btn-lg landing-cta-primary">
+                      <LogIn size={18} />
+                      {copy.login}
+                    </Link>
+                  </motion.span>
+                  <motion.span whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+                    <Link to="/register" className="btn btn-lg landing-cta-secondary">
+                      <UserPlus size={18} />
+                      {copy.register}
+                    </Link>
+                  </motion.span>
+                </div>
+              </motion.div>
+            </div>
+          </section>
+        </main>
+
+        <footer className="landing-footer">
+          <div className="landing-container landing-footer-inner">
+            <div>
+              <Brand copy={copy} />
+              <p>{copy.footer}</p>
+            </div>
+            <ul>
+              <li>
+                <MapPin size={16} />
+                {copy.address}
+              </li>
+              <li>
+                <Phone size={16} />
+                {copy.phone}
+              </li>
+              <li>
+                <a href="https://www.trk.kg" target="_blank" rel="noopener noreferrer">
+                  {copy.site}
+                </a>
+              </li>
+            </ul>
           </div>
-          <ul>
-            <li>
-              <MapPin size={16} />
-              {copy.address}
-            </li>
-            <li>
-              <Phone size={16} />
-              {copy.phone}
-            </li>
-            <li>
-              <a href="https://www.trk.kg" target="_blank" rel="noopener noreferrer">
-                {copy.site}
-              </a>
-            </li>
-          </ul>
-        </div>
-      </footer>
-    </div>
+        </footer>
+      </div>
+    </MotionConfig>
   );
 }

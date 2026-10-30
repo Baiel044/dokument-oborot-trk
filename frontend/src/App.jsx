@@ -1,9 +1,9 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./router/ProtectedRoute";
 import { AppShell } from "./components/layout/AppShell";
 import { useAuth } from "./context/AuthContext";
 import { useLanguage } from "./context/LanguageContext";
-import { LandingPage } from "./pages/landing/LandingPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
@@ -16,16 +16,24 @@ import { UsersPage } from "./pages/users/UsersPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { AdminPage } from "./pages/admin/AdminPage";
 
+// The landing page pulls in animation libraries, so signed-in users never download it.
+const LandingPage = lazy(() => import("./pages/landing/LandingPage").then((module) => ({ default: module.LandingPage })));
+
 export default function App() {
   const { user, loading } = useAuth();
   const { t } = useLanguage();
 
   // Guests see the public landing page at "/", signed-in users see the dashboard there.
+  const loader = <div className="page-loader">{t("route.forbiddenLoading")}</div>;
   let homeElement = <AppShell />;
   if (loading) {
-    homeElement = <div className="page-loader">{t("route.forbiddenLoading")}</div>;
+    homeElement = loader;
   } else if (!user) {
-    homeElement = <LandingPage />;
+    homeElement = (
+      <Suspense fallback={loader}>
+        <LandingPage />
+      </Suspense>
+    );
   }
 
   return (

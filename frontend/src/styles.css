@@ -4042,7 +4042,33 @@ input[type="radio"] {
     radial-gradient(circle at 0% 100%, rgba(13, 148, 136, 0.1), transparent 40%), var(--color-bg);
 }
 
+.landing-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.landing-scene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.landing-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-primary-500), var(--color-accent-teal));
+  transform-origin: 0 50%;
+}
+
 .landing-hero-inner {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   align-items: center;
@@ -4091,6 +4117,10 @@ input[type="radio"] {
   gap: var(--space-3);
 }
 
+.landing-hero-actions > span {
+  display: inline-flex;
+}
+
 .landing-preview {
   position: relative;
   display: flex;
@@ -4107,7 +4137,6 @@ input[type="radio"] {
   background: #fff;
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
-  transform: rotate(-1.5deg);
 }
 
 .landing-sheet-head {
@@ -4147,6 +4176,7 @@ input[type="radio"] {
 }
 
 .landing-sheet-rule {
+  transform-origin: 0 50%;
   height: 2px;
   margin: var(--space-4) 0 var(--space-5);
   background: var(--color-text-primary);
@@ -4183,7 +4213,6 @@ input[type="radio"] {
   background: var(--color-success-bg);
   font-size: var(--font-size-sm);
   font-weight: 700;
-  transform: rotate(-6deg);
 }
 
 .landing-route {
@@ -4275,12 +4304,6 @@ input[type="radio"] {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-xs);
-  transition: box-shadow var(--transition-base), transform var(--transition-base);
-}
-
-.landing-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
 }
 
 .landing-card-icon {
@@ -4327,14 +4350,14 @@ input[type="radio"] {
   gap: var(--space-3);
 }
 
-.landing-steps li:not(:last-child)::after {
-  content: "";
+.landing-step-line {
   position: absolute;
   top: 22px;
   left: 56px;
   right: calc(-1 * var(--space-6) + 8px);
   height: 2px;
   background: linear-gradient(90deg, var(--color-primary-200), transparent);
+  transform-origin: 0 50%;
 }
 
 .landing-step-number {
@@ -4488,7 +4511,7 @@ input[type="radio"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .landing-steps li::after {
+  .landing-step-line {
     display: none;
   }
 }
@@ -4573,10 +4596,13 @@ input[type="radio"] {
   .landing-sheet {
     aspect-ratio: auto;
     padding-bottom: 76px;
-    transform: none;
+  }
+
+  .landing-hero-actions > span {
+    flex: 1;
   }
 
   .landing-hero-actions .btn {
-    flex: 1;
+    width: 100%;
   }
 }
