@@ -4606,3 +4606,27 @@ input[type="radio"] {
     width: 100%;
   }
 }
+
+.chunk-error {
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+.chunk-error::before {
+  display: none;
+}
+
+.chunk-error strong {
+  font-size: var(--font-size-xl);
+  color: var(--color-text-primary);
+}
+
+.chunk-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
