@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./router/ProtectedRoute";
 import { AppShell } from "./components/layout/AppShell";
@@ -15,9 +15,11 @@ import { ProfilePage } from "./pages/profile/ProfilePage";
 import { UsersPage } from "./pages/users/UsersPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { AdminPage } from "./pages/admin/AdminPage";
+import { ChunkErrorBoundary } from "./components/ui/ChunkErrorBoundary";
+import { lazyWithReload } from "./utils/lazyWithReload";
 
 // The landing page pulls in animation libraries, so signed-in users never download it.
-const LandingPage = lazy(() => import("./pages/landing/LandingPage").then((module) => ({ default: module.LandingPage })));
+const LandingPage = lazyWithReload(() => import("./pages/landing/LandingPage").then((module) => ({ default: module.LandingPage })));
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -30,9 +32,11 @@ export default function App() {
     homeElement = loader;
   } else if (!user) {
     homeElement = (
-      <Suspense fallback={loader}>
-        <LandingPage />
-      </Suspense>
+      <ChunkErrorBoundary>
+        <Suspense fallback={loader}>
+          <LandingPage />
+        </Suspense>
+      </ChunkErrorBoundary>
     );
   }
 

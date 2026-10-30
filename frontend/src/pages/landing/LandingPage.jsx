@@ -27,7 +27,8 @@ import { useLanguage } from "../../context/LanguageContext";
 import { LanguageSwitcher } from "../../components/ui/LanguageSwitcher";
 
 // three.js is large, so the 3D background loads separately and only on this page.
-const HeroScene = lazy(() => import("./HeroScene"));
+// It is decoration only: if it fails to load, the hero simply shows without it.
+const HeroScene = lazy(() => import("./HeroScene").catch(() => ({ default: () => null })));
 
 const EASE_OUT = [0.16, 1, 0.3, 1];
 
