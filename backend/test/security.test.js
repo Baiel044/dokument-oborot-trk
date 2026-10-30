@@ -154,6 +154,31 @@ test("1. official PDF: only director/admin and only for approved documents", asy
   assert.equal(approved.data.document.isOfficial, true, "approval issues the official PDF");
 });
 
+test("official PDF made with an old layout is regenerated when opened", async () => {
+  const teacher = await login("teacher", "teacher123");
+  const director = await login("director", "director123");
+  const created = await call("POST", "/api/documents", { token: teacher, form: pdfForm({ title: "Арыз", category: "statements" }) });
+  const id = created.data.document.id;
+  await call("PATCH", `/api/documents/${id}/status`, { token: teacher, body: { status: "submitted" } });
+  await call("PATCH", `/api/documents/${id}/status`, { token: director, body: { status: "pending" } });
+  await call("PATCH", `/api/documents/${id}/status`, { token: director, body: { status: "approved" } });
+
+  const current = await call("POST", `/api/documents/${id}/generate-pdf`, { token: teacher });
+  assert.equal(current.data.officialPdfReused, true, "a current PDF is reused");
+  const oldFileName = current.data.officialPdf.fileName;
+
+  const db = store.readDb();
+  delete db.documents.find((item) => item.id === id).officialPdf.layoutVersion;
+  store.writeDb(db);
+
+  const refreshed = await call("POST", `/api/documents/${id}/generate-pdf`, { token: teacher });
+  assert.equal(refreshed.status, 200, "the author may refresh an already issued PDF");
+  assert.notEqual(refreshed.data.officialPdf.fileName, oldFileName);
+  assert.ok(fs.existsSync(path.join(UPLOAD_DIR, refreshed.data.officialPdf.fileName)));
+  await wait(100);
+  assert.ok(!fs.existsSync(path.join(UPLOAD_DIR, oldFileName)), "the outdated PDF is removed");
+});
+
 test("PDF font with Kyrgyz Cyrillic is bundled, so Linux servers do not fall back to transliteration", async () => {
   const fontkit = require("@pdf-lib/fontkit");
   const { getPdfFontCandidates } = require("../src/utils/pdfFonts");

@@ -9,7 +9,11 @@ const { UPLOAD_DIR } = require("../utils/config");
 const { CUSTOM_TEMPLATE_DIR, getLetterheadTemplatePath } = require("../utils/letterhead");
 const { removeUploadOnFailure } = require("../middleware/uploads");
 const { DOCUMENT_CATEGORIES, normalizeDocumentCategory } = require("../utils/catalogs");
-const { generateLetterheadDocumentPdf, generateOfficialDocumentPdf } = require("../utils/letterheadDocumentPdf");
+const {
+  OFFICIAL_PDF_LAYOUT_VERSION,
+  generateLetterheadDocumentPdf,
+  generateOfficialDocumentPdf,
+} = require("../utils/letterheadDocumentPdf");
 const { createDocumentNumber } = require("../utils/documentNumbering");
 const { DOCUMENT_EXTENSIONS, isAllowedDocumentFile, isAllowedPdfFile } = require("../utils/uploadValidation");
 
@@ -296,6 +300,11 @@ function getUsableOfficialPdf(document) {
   return fs.existsSync(absolutePath) ? officialPdf : null;
 }
 
+/** PDFs made with an older layout are regenerated instead of being served again. */
+function isOfficialPdfCurrent(officialPdf) {
+  return Number(officialPdf?.layoutVersion || 1) >= OFFICIAL_PDF_LAYOUT_VERSION;
+}
+
 function buildOfficialPdfResponse(officialPdf) {
   if (!officialPdf) {
     return null;
@@ -327,7 +336,7 @@ function addOfficialPdfNotification(db, req, document, createdAt) {
 
 async function attachOfficialPdfToDocument(db, req, document) {
   const existingOfficialPdf = getUsableOfficialPdf(document);
-  if (existingOfficialPdf) {
+  if (existingOfficialPdf && isOfficialPdfCurrent(existingOfficialPdf)) {
     return {
       officialPdf: existingOfficialPdf,
       generated: false,
@@ -935,6 +944,7 @@ router.post("/:id/generate-pdf", authenticate, (req, res) => {
   }
 
   const existingOfficialPdf = getUsableOfficialPdf(document);
+  // An already issued PDF in an old layout may be refreshed by anyone who can see the document.
   if (!existingOfficialPdf) {
     if (!["ADMIN", "DIRECTOR"].includes(req.user.roleCode)) {
       return res.status(403).json({ message: "Расмий PDFти директор же администратор гана түзө алат." });
@@ -944,7 +954,7 @@ router.post("/:id/generate-pdf", authenticate, (req, res) => {
     }
   }
 
-  if (existingOfficialPdf) {
+  if (existingOfficialPdf && isOfficialPdfCurrent(existingOfficialPdf)) {
     return res.json({
       document: decorateDocument(document, db.users),
       officialPdf: buildOfficialPdfResponse(existingOfficialPdf),
@@ -975,7 +985,7 @@ router.post("/:id/generate-pdf", authenticate, (req, res) => {
       document.officialPdfGeneratedAt = officialPdf.generatedAt;
       document.updatedAt = now;
 
-      if (document.uploadedBy && document.uploadedBy !== req.user.id) {
+      if (!existingOfficialPdf && document.uploadedBy && document.uploadedBy !== req.user.id) {
         db.notifications.unshift({
           id: createId("notif"),
           userId: document.uploadedBy,
@@ -988,7 +998,10 @@ router.post("/:id/generate-pdf", authenticate, (req, res) => {
       }
 
       writeDb(db);
-      appendOfficialPdfAudit(req, document, officialPdf, { source: "manual" });
+      if (existingOfficialPdf) {
+        removeUnreferencedFiles(db, [path.basename(existingOfficialPdf.filePath)]);
+      }
+      appendOfficialPdfAudit(req, document, officialPdf, { source: existingOfficialPdf ? "layout-refresh" : "manual" });
 
       return res.json({
         document: decorateDocument(document, db.users),

@@ -12,6 +12,8 @@ const {
 } = require("./letterhead");
 const FALLBACK_CONTENT_TOP_MARGIN = 70;
 const PDF_BOTTOM_MARGIN = 50;
+// Bump when the official PDF layout changes so stored PDFs are regenerated on next open.
+const OFFICIAL_PDF_LAYOUT_VERSION = 2;
 
 function buildSafePdfName(title, fallbackName = "letterhead-document") {
   const safeBaseName = String(title || "letterhead-document")
@@ -601,10 +603,12 @@ async function generateOfficialDocumentPdf({ document, author, director }) {
     isOfficial: true,
     documentNumber: document.documentNumber || null,
     size: stats.size,
+    layoutVersion: OFFICIAL_PDF_LAYOUT_VERSION,
   };
 }
 
 module.exports = {
+  OFFICIAL_PDF_LAYOUT_VERSION,
   generateLetterheadDocumentPdf,
   generateOfficialDocumentPdf,
 };

@@ -655,9 +655,22 @@ export function DocumentsPage() {
     return canManageDocuments && !hasOfficialPdf(document) && getDocumentStatusGroup(document) === "approved";
   }
 
+  // The server regenerates PDFs made with an outdated layout and returns the current file.
+  async function getCurrentOfficialPdfPath(document) {
+    const data = await api.post(`/api/documents/${document.id}/generate-pdf`, {});
+    if (data.document) {
+      setDocuments((currentDocuments) =>
+        currentDocuments.map((item) => (item.id === document.id ? data.document : item))
+      );
+      setSelectedDocument((currentDocument) =>
+        currentDocument?.id === document.id ? data.document : currentDocument
+      );
+    }
+    return getOfficialPdfApiPath(data.document || document);
+  }
+
   async function openOfficialPdf(document) {
-    const path = getOfficialPdfApiPath(document);
-    if (!path) {
+    if (!getOfficialPdfApiPath(document)) {
       return;
     }
 
@@ -665,6 +678,7 @@ export function DocumentsPage() {
     setPdfLoadingId(`${document.id}:open`);
 
     try {
+      const path = await getCurrentOfficialPdfPath(document);
       const blob = await api.download(path);
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener,noreferrer");
@@ -677,8 +691,7 @@ export function DocumentsPage() {
   }
 
   async function downloadOfficialPdf(document) {
-    const path = getOfficialPdfApiPath(document);
-    if (!path) {
+    if (!getOfficialPdfApiPath(document)) {
       return;
     }
 
@@ -686,6 +699,7 @@ export function DocumentsPage() {
     setPdfLoadingId(`${document.id}:download`);
 
     try {
+      const path = await getCurrentOfficialPdfPath(document);
       const blob = await api.download(path);
       const url = URL.createObjectURL(blob);
       const link = window.document.createElement("a");
