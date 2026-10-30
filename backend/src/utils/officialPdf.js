@@ -5,7 +5,13 @@ const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
 const { getPdfFontCandidates } = require("./pdfFonts");
 const { UPLOAD_DIR } = require("./config");
-const { LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE, getLetterheadTemplatePath } = require("./letterhead");
+const {
+  LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE,
+  getLetterheadTemplatePath,
+  getTemplateContentStartY,
+} = require("./letterhead");
+
+const PDF_BOTTOM_MARGIN = 50;
 
 function buildSafePdfName(title) {
   const safeBaseName = String(title || "official-document")
@@ -152,28 +158,29 @@ async function embedPdfFont(pdfDoc) {
 }
 
 async function generateOfficialRequestPdf({ request, author, director, targetRoleTitle }) {
-  let pdfDoc;
-  let page;
+  const templatePdf = fs.existsSync(getLetterheadTemplatePath())
+    ? await PDFDocument.load(fs.readFileSync(getLetterheadTemplatePath()))
+    : null;
+  const pdfDoc = await PDFDocument.create();
 
-  if (fs.existsSync(getLetterheadTemplatePath())) {
-    const templatePdf = await PDFDocument.load(fs.readFileSync(getLetterheadTemplatePath()));
-    pdfDoc = await PDFDocument.create();
-    const [templatePage] = await pdfDoc.copyPages(templatePdf, [0]);
-    pdfDoc.addPage(templatePage);
-    page = pdfDoc.getPage(0);
-  } else {
-    pdfDoc = await PDFDocument.create();
-    page = pdfDoc.addPage([595.28, 841.89]);
+  async function addPage() {
+    if (templatePdf) {
+      const [templatePage] = await pdfDoc.copyPages(templatePdf, [0]);
+      return pdfDoc.addPage(templatePage);
+    }
+    return pdfDoc.addPage([595.28, 841.89]);
   }
 
+  let page = await addPage();
   const { font, toPdfText } = await embedPdfFont(pdfDoc);
 
   const margin = 52;
   const pageWidth = page.getWidth();
   const contentWidth = pageWidth - margin * 2;
-  let cursorY = fs.existsSync(getLetterheadTemplatePath()) ? page.getHeight() - 170 : page.getHeight() - 70;
+  const pageStartY = templatePdf ? getTemplateContentStartY(page) : page.getHeight() - 70;
+  let cursorY = pageStartY;
 
-  if (!fs.existsSync(getLetterheadTemplatePath()) && fs.existsSync(LETTERHEAD_IMAGE)) {
+  if (!templatePdf && fs.existsSync(LETTERHEAD_IMAGE)) {
     const letterheadImage = await pdfDoc.embedPng(fs.readFileSync(LETTERHEAD_IMAGE));
     const bannerWidth = 170;
     const bannerHeight = (letterheadImage.height / letterheadImage.width) * bannerWidth;
@@ -192,34 +199,11 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
     cursorY = page.getHeight() - margin - bannerHeight - 36;
   }
 
-  function drawLines(lines, { fontSize = 12, color = rgb(0.08, 0.14, 0.24), gap = 6 } = {}) {
-    lines.forEach((line) => {
-      page.drawText(toPdfText(line), {
-        x: margin,
-        y: cursorY,
-        size: fontSize,
-        font,
-        color,
-      });
-      cursorY -= fontSize + gap;
-    });
-  }
+  function drawFallbackFrame() {
+    if (templatePdf) {
+      return;
+    }
 
-  function drawParagraph(label, value) {
-    drawLines([label], { fontSize: 12, color: rgb(0.2, 0.3, 0.45), gap: 4 });
-    const wrapped = wrapText(toPdfText(value || "—"), font, 12, contentWidth);
-    drawLines(wrapped, { fontSize: 12, gap: 4 });
-    cursorY -= 8;
-  }
-
-  const signatureCode = crypto
-    .createHash("sha256")
-    .update(`${request.id}|${request.updatedAt || request.createdAt}|${director.fullName}`)
-    .digest("hex")
-    .slice(0, 16)
-    .toUpperCase();
-
-  if (!fs.existsSync(getLetterheadTemplatePath())) {
     page.drawRectangle({
       x: 36,
       y: 36,
@@ -230,34 +214,78 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
     });
   }
 
-  drawLines(["ТАШ-КУМЫРСКИЙ РЕГИОНАЛЬНЫЙ КОЛЛЕДЖ"], {
-    fontSize: 17,
-    color: rgb(0.05, 0.12, 0.23),
-    gap: 10,
-  });
-  drawLines(["ОФИЦИАЛЬНЫЙ ЭЛЕКТРОННЫЙ ДОКУМЕНТ"], {
-    fontSize: 15,
-    color: rgb(0.07, 0.23, 0.54),
-    gap: 16,
-  });
+  async function ensureSpace(height) {
+    if (cursorY - height > PDF_BOTTOM_MARGIN) {
+      return;
+    }
 
-  drawParagraph("Номер документа", request.documentNumber);
-  drawParagraph("Название документа", request.documentTitle);
-  drawParagraph("Тип обращения", request.type);
-  drawParagraph("Автор", `${author.fullName} (${author.position || author.roleCode})`);
-  drawParagraph("Период", `${request.startDate || "—"} - ${request.endDate || "—"}`);
-  drawParagraph("Время отсутствия", request.absenceTime || "—");
-  drawParagraph("Суть обращения", request.reason || "—");
-  drawParagraph("Комментарий автора", request.comment || "—");
-  drawParagraph("Комментарий директора", request.directorComment || "—");
-  drawParagraph("Маршрут после подписи", targetRoleTitle || "Остается у директора");
-  drawParagraph("Подписал", director.fullName);
-  drawParagraph(
+    page = await addPage();
+    cursorY = pageStartY;
+    drawFallbackFrame();
+  }
+
+  async function drawLines(lines, { fontSize = 12, color = rgb(0.08, 0.14, 0.24), gap = 6 } = {}) {
+    for (const line of lines) {
+      await ensureSpace(fontSize + gap + 4);
+      page.drawText(toPdfText(line), {
+        x: margin,
+        y: cursorY,
+        size: fontSize,
+        font,
+        color,
+      });
+      cursorY -= fontSize + gap;
+    }
+  }
+
+  async function drawParagraph(label, value) {
+    await ensureSpace(44);
+    await drawLines([label], { fontSize: 12, color: rgb(0.2, 0.3, 0.45), gap: 4 });
+    const wrapped = wrapText(toPdfText(value || "—"), font, 12, contentWidth);
+    await drawLines(wrapped, { fontSize: 12, gap: 4 });
+    cursorY -= 8;
+  }
+
+  const signatureCode = crypto
+    .createHash("sha256")
+    .update(`${request.id}|${request.updatedAt || request.createdAt}|${director.fullName}`)
+    .digest("hex")
+    .slice(0, 16)
+    .toUpperCase();
+
+  drawFallbackFrame();
+
+  // The letterhead template already carries the college name.
+  if (!templatePdf) {
+    await drawLines(["ТАШ-КУМЫРСКИЙ РЕГИОНАЛЬНЫЙ КОЛЛЕДЖ"], {
+      fontSize: 17,
+      color: rgb(0.05, 0.12, 0.23),
+      gap: 10,
+    });
+    await drawLines(["ОФИЦИАЛЬНЫЙ ЭЛЕКТРОННЫЙ ДОКУМЕНТ"], {
+      fontSize: 15,
+      color: rgb(0.07, 0.23, 0.54),
+      gap: 16,
+    });
+  }
+
+  await drawParagraph("Номер документа", request.documentNumber);
+  await drawParagraph("Название документа", request.documentTitle);
+  await drawParagraph("Тип обращения", request.type);
+  await drawParagraph("Автор", `${author.fullName} (${author.position || author.roleCode})`);
+  await drawParagraph("Период", `${request.startDate || "—"} - ${request.endDate || "—"}`);
+  await drawParagraph("Время отсутствия", request.absenceTime || "—");
+  await drawParagraph("Суть обращения", request.reason || "—");
+  await drawParagraph("Комментарий автора", request.comment || "—");
+  await drawParagraph("Комментарий директора", request.directorComment || "—");
+  await drawParagraph("Маршрут после подписи", targetRoleTitle || "Остается у директора");
+  await drawParagraph("Подписал", director.fullName);
+  await drawParagraph(
     "Цифровая подпись (ЭЦП)",
     `ЭЦП ${signatureCode} от ${new Date(request.updatedAt || request.createdAt).toLocaleString("ru-RU")}`
   );
 
-  drawLines(["Документ сформирован автоматически и имеет официальный статус."], {
+  await drawLines(["Документ сформирован автоматически и имеет официальный статус."], {
     fontSize: 12,
     color: rgb(0.05, 0.42, 0.26),
     gap: 4,

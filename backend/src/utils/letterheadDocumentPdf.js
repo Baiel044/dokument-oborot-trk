@@ -1,63 +1,17 @@
 const fs = require("fs");
 const path = require("path");
-const { PDFArray, PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } = require("pdf-lib");
+const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fontkit = require("@pdf-lib/fontkit");
 const { getPdfFontCandidates } = require("./pdfFonts");
 const { UPLOAD_DIR } = require("./config");
 
-const { LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE, getLetterheadTemplatePath } = require("./letterhead");
-// Used when the separator line under the letterhead cannot be found in the template.
-const TEMPLATE_CONTENT_START_Y = 420;
-// Distance from the letterhead separator line to the first line of text.
-const TEMPLATE_LINE_GAP = 28;
+const {
+  LETTERHEAD_IMAGE_PATH: LETTERHEAD_IMAGE,
+  getLetterheadTemplatePath,
+  getTemplateContentStartY,
+} = require("./letterhead");
 const FALLBACK_CONTENT_TOP_MARGIN = 70;
 const PDF_BOTTOM_MARGIN = 50;
-
-function readPageContent(page) {
-  const contents = page.node.Contents();
-  if (!contents) {
-    return "";
-  }
-
-  const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
-  return refs
-    .map((ref) => {
-      const stream = page.doc.context.lookup(ref);
-      if (!(stream instanceof PDFRawStream)) {
-        return "";
-      }
-      return Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1");
-    })
-    .join("\n");
-}
-
-/**
- * Finds the horizontal separator line under the letterhead (the lowest wide line
- * in the top half of the page) and returns the Y where the text should start.
- */
-function getTemplateContentStartY(page) {
-  let content;
-  try {
-    content = readPageContent(page);
-  } catch {
-    return TEMPLATE_CONTENT_START_Y;
-  }
-
-  const { width, height } = page.getSize();
-  const lineRegex = /(-?[\d.]+)\s+(-?[\d.]+)\s+m\s+(-?[\d.]+)\s+(-?[\d.]+)\s+l/g;
-  let separatorY = null;
-
-  for (const match of content.matchAll(lineRegex)) {
-    const [x1, y1, x2, y2] = match.slice(1, 5).map(Number);
-    const isHorizontal = Math.abs(y1 - y2) < 1;
-    const isWide = Math.abs(x2 - x1) > width / 2;
-    if (isHorizontal && isWide && y1 > height / 2 && (separatorY === null || y1 < separatorY)) {
-      separatorY = y1;
-    }
-  }
-
-  return separatorY === null ? TEMPLATE_CONTENT_START_Y : separatorY - TEMPLATE_LINE_GAP;
-}
 
 function buildSafePdfName(title, fallbackName = "letterhead-document") {
   const safeBaseName = String(title || "letterhead-document")
