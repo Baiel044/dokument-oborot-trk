@@ -45,8 +45,8 @@ const links = [
   { to: "/requests", labelKey: "nav.requests", icon: "requests", group: "workflow" },
   { to: "/documents", labelKey: "nav.documents", icon: "documents", group: "workflow" },
   { to: "/reports", labelKey: "nav.reports", icon: "reports", group: "manage", roles: ["ADMIN", "DIRECTOR", "ACADEMIC_OFFICE", "HR", "ACCOUNTANT"] },
-  { to: "/users", labelKey: "nav.users", icon: "users", group: "manage", roles: ["ADMIN", "DIRECTOR", "HR"] },
-  { to: "/admin", labelKey: "nav.admin", icon: "admin", group: "manage", roles: ["ADMIN", "DIRECTOR"] },
+  { to: "/users", labelKey: "nav.users", icon: "users", group: "manage", roles: ["ADMIN", "HR"] },
+  { to: "/admin", labelKey: "nav.admin", icon: "admin", group: "manage", roles: ["ADMIN"] },
   { to: "/profile", labelKey: "nav.profile", icon: "profile", group: "manage" },
 ];
 
@@ -263,7 +263,8 @@ export function AppShell() {
     const timeoutId = window.setTimeout(async () => {
       setIsSearching(true);
 
-      const canSearchUsers = ["ADMIN", "DIRECTOR"].includes(user.roleCode);
+      // User results open the admin page, which only administrators can see.
+      const canSearchUsers = user.roleCode === "ADMIN";
       const requests = [
         api.get("/api/messages"),
         api.get("/api/requests"),
@@ -328,7 +329,7 @@ export function AppShell() {
                 type: shellCopy.documents,
                 title: item.title || item.fileName,
                 text: item.description || item.category,
-                to: "/documents",
+                to: `/documents?document=${encodeURIComponent(item.id)}`,
               }))
           : [];
 

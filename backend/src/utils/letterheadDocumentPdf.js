@@ -10,10 +10,11 @@ const {
   getLetterheadTemplatePath,
   getTemplateContentStartY,
 } = require("./letterhead");
+const { COLLEGE_TIME_ZONE, STAMP_HEIGHT, drawSignatureStamp } = require("./signatureStamp");
 const FALLBACK_CONTENT_TOP_MARGIN = 70;
 const PDF_BOTTOM_MARGIN = 50;
 // Bump when the official PDF layout changes so stored PDFs are regenerated on next open.
-const OFFICIAL_PDF_LAYOUT_VERSION = 2;
+const OFFICIAL_PDF_LAYOUT_VERSION = 3;
 
 function buildSafePdfName(title, fallbackName = "letterhead-document") {
   const safeBaseName = String(title || "letterhead-document")
@@ -303,7 +304,7 @@ async function generateLetterheadDocumentPdf({ title, categoryTitle, description
   await drawParagraph("Название документа", title);
   await drawParagraph("Категория", categoryTitle);
   await drawParagraph("Подготовил", `${author.fullName} (${author.position || author.roleCode})`);
-  await drawParagraph("Дата создания", new Date().toLocaleString("ru-RU"));
+  await drawParagraph("Дата создания", new Date().toLocaleString("ru-RU", { timeZone: COLLEGE_TIME_ZONE }));
   await drawParagraph("Содержание", description || "Без дополнительного описания");
 
   await drawLines(["Документ автоматически сформирован на фирменном бланке колледжа."], {
@@ -370,6 +371,7 @@ function formatDocumentDate(value) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: COLLEGE_TIME_ZONE,
   });
 }
 
@@ -526,6 +528,24 @@ async function generateOfficialDocumentPdf({ document, author, director }) {
     cursorY -= gapAfter;
   }
 
+  async function drawStamp(signerName, details) {
+    await ensureSpace(STAMP_HEIGHT + 24);
+    const topY = cursorY + 8;
+    await drawSignatureStamp({
+      pdfDoc,
+      page,
+      font,
+      toPdfText,
+      x: margin,
+      topY,
+      maxWidth: contentWidth,
+      signerName,
+    });
+    cursorY = topY - STAMP_HEIGHT - 12;
+    await drawLines(wrapText(toPdfText(details), font, 9, contentWidth), { fontSize: 9, color: rgb(0.31, 0.39, 0.54), gap: 4 });
+    cursorY -= 4;
+  }
+
   async function drawRouteHistory(routeHistory) {
     await drawLines(["История маршрута"], { fontSize: 13, color: rgb(0.07, 0.23, 0.54), gap: 8 });
     for (const line of getRouteHistoryLines(routeHistory)) {
@@ -575,11 +595,16 @@ async function generateOfficialDocumentPdf({ document, author, director }) {
   });
   await drawParagraph("Статус документа", getOfficialDocumentStatus(document));
   await drawParagraph("Директор", directorName);
-  await drawParagraph("Дата утверждения", approved ? formatDocumentDate(approvedAt) : "Не утверждено");
-  await drawParagraph("Отметка о цифровой подписи", signatureText, {
-    valueFontSize: 11,
-    gapAfter: 10,
-  });
+  // Without a known signer the stamp would be empty, so the plain text is kept.
+  if (approved && director) {
+    await drawStamp(directorName, `Цифровая подпись директора подтверждена. Дата утверждения: ${formatDocumentDate(approvedAt)}`);
+  } else {
+    await drawParagraph("Дата утверждения", approved ? formatDocumentDate(approvedAt) : "Не утверждено");
+    await drawParagraph("Отметка о цифровой подписи", signatureText, {
+      valueFontSize: 11,
+      gapAfter: 10,
+    });
+  }
   await drawRouteHistory(document.routeHistory);
 
   await drawLines(["Документ сформирован автоматически в системе электронного документооборота."], {

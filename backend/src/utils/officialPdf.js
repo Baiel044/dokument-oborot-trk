@@ -10,6 +10,7 @@ const {
   getLetterheadTemplatePath,
   getTemplateContentStartY,
 } = require("./letterhead");
+const { STAMP_HEIGHT, drawSignatureStamp, formatSignedAt } = require("./signatureStamp");
 
 const PDF_BOTTOM_MARGIN = 50;
 
@@ -246,6 +247,24 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
     cursorY -= 8;
   }
 
+  async function drawStamp(signerName, details) {
+    await ensureSpace(STAMP_HEIGHT + 24);
+    const topY = cursorY + 8;
+    await drawSignatureStamp({
+      pdfDoc,
+      page,
+      font,
+      toPdfText,
+      x: margin,
+      topY,
+      maxWidth: contentWidth,
+      signerName,
+    });
+    cursorY = topY - STAMP_HEIGHT - 12;
+    await drawLines(wrapText(toPdfText(details), font, 9, contentWidth), { fontSize: 9, color: rgb(0.31, 0.39, 0.54), gap: 4 });
+    cursorY -= 4;
+  }
+
   const signatureCode = crypto
     .createHash("sha256")
     .update(`${request.id}|${request.updatedAt || request.createdAt}|${director.fullName}`)
@@ -279,10 +298,9 @@ async function generateOfficialRequestPdf({ request, author, director, targetRol
   await drawParagraph("Комментарий автора", request.comment || "—");
   await drawParagraph("Комментарий директора", request.directorComment || "—");
   await drawParagraph("Маршрут после подписи", targetRoleTitle || "Остается у директора");
-  await drawParagraph("Подписал", director.fullName);
-  await drawParagraph(
-    "Цифровая подпись (ЭЦП)",
-    `ЭЦП ${signatureCode} от ${new Date(request.updatedAt || request.createdAt).toLocaleString("ru-RU")}`
+  await drawStamp(
+    director.fullName,
+    `Подписал: ${director.fullName}. ЭЦП ${signatureCode} от ${formatSignedAt(request.updatedAt || request.createdAt)}`
   );
 
   await drawLines(["Документ сформирован автоматически и имеет официальный статус."], {

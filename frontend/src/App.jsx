@@ -59,7 +59,7 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={["ADMIN", "DIRECTOR", "HR"]} />}>
+      <Route element={<ProtectedRoute roles={["ADMIN", "HR"]} />}>
         <Route element={<AppShell />}>
           <Route path="/users" element={<UsersPage />} />
         </Route>
@@ -71,7 +71,7 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={["ADMIN", "DIRECTOR"]} />}>
+      <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
         <Route element={<AppShell />}>
           <Route path="/admin" element={<AdminPage />} />
         </Route>
