@@ -10,6 +10,7 @@ const { getRoleTitle, normalizeRequestStatus } = require("../utils/catalogs");
 const { generateOfficialRequestPdf } = require("../utils/officialPdf");
 const { getOrCreateDocumentNumber } = require("../utils/documentNumbering");
 const { DOCUMENT_EXTENSIONS, isAllowedDocumentFile } = require("../utils/uploadValidation");
+const { removeUnreferencedFiles } = require("../utils/uploadCleanup");
 
 const router = express.Router();
 
@@ -916,6 +917,46 @@ async function updateRequestStatus(req, res) {
 
 router.put("/:id/status", authenticate, updateRequestStatus);
 router.patch("/:id/status", authenticate, updateRequestStatus);
+
+router.delete("/:id", authenticate, (req, res) => {
+  if (!["DIRECTOR", "ADMIN"].includes(req.user.roleCode)) {
+    return res.status(403).json({ message: "Кайрылууну директор же администратор гана өчүрө алат." });
+  }
+
+  const db = readDb();
+  const requestIndex = db.requests.findIndex((item) => item.id === req.params.id);
+
+  if (requestIndex === -1) {
+    return res.status(404).json({ message: "Кайрылуу табылган жок." });
+  }
+
+  // The official document of a signed request has its own archive record and stays there with its PDF.
+  const [request] = db.requests.splice(requestIndex, 1);
+  db.notifications = db.notifications.filter((item) => item.targetPath !== getRequestTargetPath(request.id));
+  writeDb(db);
+  removeUnreferencedFiles(
+    db,
+    [request.attachment?.filePath, request.officialDocument?.filePath]
+      .filter(Boolean)
+      .map((filePath) => path.basename(String(filePath)))
+  );
+
+  appendAuditLog({
+    userId: req.user.id,
+    action: "Кайрылуу өчүрүлдү",
+    entityType: "request",
+    entityId: request.id,
+    req,
+    metadata: {
+      documentTitle: request.documentTitle,
+      type: request.type,
+      status: request.status,
+      authorId: request.userId,
+    },
+  });
+
+  return res.json({ message: "Кайрылуу өчүрүлдү." });
+});
 
 router.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError) {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useAuth } from "../../context/AuthContext";
@@ -21,6 +22,26 @@ const DEFAULT_ABSENCE_TIME = {
   ky: "Толук күн",
   ru: "Полный день",
 };
+
+function RequestTypeOptions({ types, groups, language }) {
+  const groupedTypes = new Set(groups.flatMap((group) => group.types));
+  const renderOption = (type) => (
+    <option key={type} value={type}>
+      {translateRequestType(type, language)}
+    </option>
+  );
+
+  return (
+    <>
+      {types.filter((type) => !groupedTypes.has(type)).map(renderOption)}
+      {groups.map((group) => (
+        <optgroup key={group.title} label={translateRequestType(group.title, language)}>
+          {group.types.map(renderOption)}
+        </optgroup>
+      ))}
+    </>
+  );
+}
 
 function createInitialForm(language) {
   return {
@@ -120,6 +141,7 @@ export function RequestsPage() {
   const targetRequestId = searchParams.get("request") || "";
   const [requests, setRequests] = useState([]);
   const [requestTypes, setRequestTypes] = useState([]);
+  const [requestTypeGroups, setRequestTypeGroups] = useState([]);
   const [requestStatuses, setRequestStatuses] = useState([]);
   const [filters, setFilters] = useState({
     status: "",
@@ -137,6 +159,9 @@ export function RequestsPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const filterLabels =
     language === "ru"
       ? {
@@ -242,6 +267,13 @@ export function RequestsPage() {
           signature: "Подпись",
           signatureCode: "Код ЭЦП",
           noTarget: "Маршрут завершён",
+          delete: "Удалить",
+          deleteTitle: "Удалить заявление",
+          deleteQuestion: "Вы действительно хотите удалить это заявление?",
+          deleteWarning: "Это действие нельзя отменить.",
+          deleteOfficialNote: "Официальный PDF останется в разделе «Документы».",
+          deleteCancel: "Отмена",
+          deleteError: "Не удалось удалить заявление.",
         }
       : {
           routeHistory: "Маршрут тарыхы",
@@ -250,6 +282,13 @@ export function RequestsPage() {
           signature: "Кол тамга",
           signatureCode: "ЭЦП коду",
           noTarget: "Маршрут аяктады",
+          delete: "Өчүрүү",
+          deleteTitle: "Арызды өчүрүү",
+          deleteQuestion: "Бул арызды чын эле өчүрөсүзбү?",
+          deleteWarning: "Бул аракетти артка кайтаруу мүмкүн эмес.",
+          deleteOfficialNote: "Расмий PDF «Документтер» бөлүмүндө калат.",
+          deleteCancel: "Жокко чыгаруу",
+          deleteError: "Арызды өчүрүү мүмкүн болгон жок.",
         };
 
   const routeActionLabels =
@@ -355,6 +394,7 @@ export function RequestsPage() {
     const [requestsData, catalogs] = await Promise.all([api.get(requestsUrl), api.get("/api/meta/catalogs")]);
     setRequests(requestsData.requests);
     setRequestTypes(catalogs.requestTypes);
+    setRequestTypeGroups(catalogs.requestTypeGroups || []);
     setRequestStatuses(catalogs.requestStatuses || []);
   }
 
@@ -543,6 +583,27 @@ export function RequestsPage() {
     window.dispatchEvent(new Event("app:badges-refresh"));
   }
 
+  function askToDeleteRequest(requestItem) {
+    setDeleteError("");
+    setDeleteCandidate(requestItem);
+  }
+
+  async function confirmDeleteRequest() {
+    setDeleteError("");
+    setIsDeleting(true);
+
+    try {
+      await api.delete(`/api/requests/${deleteCandidate.id}`);
+      setRequests((current) => current.filter((item) => item.id !== deleteCandidate.id));
+      setDeleteCandidate(null);
+      window.dispatchEvent(new Event("app:badges-refresh"));
+    } catch (submitError) {
+      setDeleteError(submitError.message || detailLabels.deleteError);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   async function returnBeforeSignature(requestItem) {
     const directorComment = window.prompt(t("requests.directorPrompt"), requestItem.directorComment || "");
     if (directorComment === null) {
@@ -623,11 +684,7 @@ export function RequestsPage() {
                 onChange={(event) => updateField("type", event.target.value)}
               >
                 <option value="">{t("requests.chooseType")}</option>
-                {requestTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {translateRequestType(type, language)}
-                  </option>
-                ))}
+                <RequestTypeOptions types={requestTypes} groups={requestTypeGroups} language={language} />
               </select>
               {fieldErrors.type ? <span className="field-error-text">{fieldErrors.type}</span> : null}
             </label>
@@ -743,11 +800,7 @@ export function RequestsPage() {
             {filterLabels.type}
             <select value={filters.type} onChange={(event) => updateFilter("type", event.target.value)}>
               <option value="">{filterLabels.allTypes}</option>
-              {requestTypes.map((type) => (
-                <option key={type} value={type}>
-                  {translateRequestType(type, language)}
-                </option>
-              ))}
+              <RequestTypeOptions types={requestTypes} groups={requestTypeGroups} language={language} />
             </select>
           </label>
 
@@ -949,11 +1002,7 @@ export function RequestsPage() {
                         {!requestTypes.includes(editForm.type) && editForm.type ? (
                           <option value={editForm.type}>{translateRequestType(editForm.type, language)}</option>
                         ) : null}
-                        {requestTypes.map((type) => (
-                          <option key={type} value={type}>
-                            {translateRequestType(type, language)}
-                          </option>
-                        ))}
+                        <RequestTypeOptions types={requestTypes} groups={requestTypeGroups} language={language} />
                       </select>
                       {editFieldErrors.type ? <span className="field-error-text">{editFieldErrors.type}</span> : null}
                     </label>
@@ -1119,6 +1168,17 @@ export function RequestsPage() {
                       </button>
                     ) : null}
 
+                    {canReview ? (
+                      <button
+                        className="ghost-button request-action request-action--delete"
+                        type="button"
+                        onClick={() => askToDeleteRequest(item)}
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                        {detailLabels.delete}
+                      </button>
+                    ) : null}
+
                     {showDirectorRoutes ? (
                       <div className="route-actions">
                         {directorRoutes.map((route) => (
@@ -1143,6 +1203,38 @@ export function RequestsPage() {
           <EmptyState title={t("requests.noDocuments")} text={t("requests.noDocumentsText")} />
         )}
       </section>
+
+      {deleteCandidate ? (
+        <div className="document-modal-backdrop" role="presentation" onClick={() => setDeleteCandidate(null)}>
+          <section
+            className="document-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-delete-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="request-delete-title">{detailLabels.deleteTitle}</h2>
+            <p>
+              <strong>{readableText(deleteCandidate.documentTitle, filterLabels.defaultTitle)}</strong>
+              <br />
+              {readableText(deleteCandidate.authorName, filterLabels.employee)}
+            </p>
+            <p>{detailLabels.deleteQuestion}</p>
+            <small>
+              {detailLabels.deleteWarning} {deleteCandidate.isOfficial ? detailLabels.deleteOfficialNote : ""}
+            </small>
+            {deleteError ? <p className="form-error">{deleteError}</p> : null}
+            <div className="document-confirm-modal__actions">
+              <button className="ghost-button" type="button" onClick={() => setDeleteCandidate(null)}>
+                {detailLabels.deleteCancel}
+              </button>
+              <button className="danger-button" type="button" onClick={confirmDeleteRequest} disabled={isDeleting}>
+                {detailLabels.delete}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -15,6 +15,7 @@ const {
   generateOfficialDocumentPdf,
 } = require("../utils/letterheadDocumentPdf");
 const { createDocumentNumber } = require("../utils/documentNumbering");
+const { removeUnreferencedFiles } = require("../utils/uploadCleanup");
 const { DOCUMENT_EXTENSIONS, isAllowedDocumentFile, isAllowedPdfFile } = require("../utils/uploadValidation");
 
 const router = express.Router();
@@ -1220,17 +1221,6 @@ function collectDocumentFileNames(document) {
   ]
     .filter(Boolean)
     .map((filePath) => path.basename(String(filePath)));
-}
-
-/** Deletes files from disk unless another document or request still points to them. */
-function removeUnreferencedFiles(db, fileNames) {
-  const stillReferenced = JSON.stringify([db.documents, db.requests]);
-  [...new Set(fileNames)].forEach((fileName) => {
-    if (!fileName || stillReferenced.includes(fileName)) {
-      return;
-    }
-    fs.rm(path.join(UPLOAD_DIR, fileName), { force: true }, () => {});
-  });
 }
 
 router.delete("/:id", authenticate, (req, res) => {

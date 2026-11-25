@@ -111,7 +111,8 @@ router.post("/register", async (req, res) => {
 
   db.users.unshift(user);
 
-  const approvers = db.users.filter((item) => ["ADMIN", "DIRECTOR"].includes(item.roleCode));
+  // Accounts are approved on the admin page, which only administrators can open.
+  const approvers = db.users.filter((item) => item.roleCode === "ADMIN");
   approvers.forEach((item) => {
     db.notifications.unshift({
       id: createId("notif"),
@@ -134,7 +135,7 @@ router.post("/register", async (req, res) => {
   });
 
   return res.status(201).json({
-    message: "Катталуу арызы администраторго же директорго жөнөтүлдү.",
+    message: "Катталуу арызы администраторго жөнөтүлдү.",
     user: sanitizeUser(user),
   });
 });

@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { api } from "../../services/api";
 import { translateDocumentCategory } from "../../utils/localization";
+import { DocumentFolders } from "./DocumentFolders";
 
 const DEFAULT_CATEGORY = "statements";
+// Value of the "category" URL parameter that lists every document regardless of its folder.
+const ALL_CATEGORIES = "all";
 const STATUS_FILTERS = ["all", "approved", "pending", "returned"];
 const APPROVED_STATUS_VALUES = ["approved", "approved_by_director", "accepted", "бекитилди", "одобрено", "директор кол койду"];
 const PENDING_STATUS_VALUES = ["pending", "waiting", "review", "sent", "read", "күт", "кароодо", "карап жатат", "на рассмотрении"];
@@ -157,6 +161,8 @@ export function DocumentsPage() {
   const { language, t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const targetDocumentId = searchParams.get("document") || "";
+  const openCategory = searchParams.get("category") || "";
+  const openFolder = openCategory === ALL_CATEGORIES ? "" : openCategory;
   const canManageDocuments = ["DIRECTOR", "ADMIN"].includes(user.roleCode);
 
   const labels =
@@ -166,7 +172,9 @@ export function DocumentsPage() {
           newDocument: "Новый документ загрузить",
           search: "Поиск...",
           category: "Категория",
-          allCategories: "Все категории",
+          backToFolders: "Папки",
+          allDocuments: "Все документы",
+          foundDocuments: "Найденные документы",
           no: "№",
           name: "Название",
           mark: "Метка",
@@ -250,7 +258,9 @@ export function DocumentsPage() {
           newDocument: "Жаңы документ жүктөө",
           search: "Поиск...",
           category: "Категория",
-          allCategories: "Бардык категориялар",
+          backToFolders: "Папкалар",
+          allDocuments: "Бардык документтер",
+          foundDocuments: "Табылган документтер",
           no: "№",
           name: "Название",
           mark: "Метка",
@@ -352,7 +362,6 @@ export function DocumentsPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [form, setForm] = useState({
     title: "",
@@ -576,6 +585,39 @@ export function DocumentsPage() {
     setSearchParams(nextParams);
   }
 
+  function openDocumentCategory(category) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("category", category);
+    setSearchParams(nextParams);
+  }
+
+  function showFolders() {
+    setSearchTerm("");
+    setActiveStatusFilter("all");
+    setSearchParams({});
+  }
+
+  function toggleUploadPanel() {
+    if (!showUploadPanel && categories.includes(openFolder)) {
+      setForm((current) => ({ ...current, category: openFolder }));
+    }
+    setShowUploadPanel((value) => !value);
+  }
+
+  function replaceDocument(updatedDocument) {
+    // The list groups documents by the category the list endpoint returned, so it must not change here.
+    setDocuments((currentDocuments) =>
+      currentDocuments.map((item) =>
+        item.id === updatedDocument.id ? { ...updatedDocument, category: item.category } : item
+      )
+    );
+    setSelectedDocument((currentDocument) =>
+      currentDocument?.id === updatedDocument.id
+        ? { ...updatedDocument, category: currentDocument.category }
+        : currentDocument
+    );
+  }
+
   function requestDeleteDocument(document) {
     setDeleteCandidate(document);
   }
@@ -659,12 +701,7 @@ export function DocumentsPage() {
   async function getCurrentOfficialPdfPath(document) {
     const data = await api.post(`/api/documents/${document.id}/generate-pdf`, {});
     if (data.document) {
-      setDocuments((currentDocuments) =>
-        currentDocuments.map((item) => (item.id === document.id ? data.document : item))
-      );
-      setSelectedDocument((currentDocument) =>
-        currentDocument?.id === document.id ? data.document : currentDocument
-      );
+      replaceDocument(data.document);
     }
     return getOfficialPdfApiPath(data.document || document);
   }
@@ -722,12 +759,7 @@ export function DocumentsPage() {
 
     try {
       const data = await api.post(`/api/documents/${document.id}/generate-pdf`, {});
-      setDocuments((currentDocuments) =>
-        currentDocuments.map((item) => (item.id === document.id ? data.document : item))
-      );
-      setSelectedDocument((currentDocument) =>
-        currentDocument?.id === document.id ? data.document : currentDocument
-      );
+      replaceDocument(data.document);
       setAssignmentMessage(labels.pdfReady);
     } catch (submitError) {
       setPdfError(submitError.message || labels.pdfGenerateError);
@@ -736,11 +768,19 @@ export function DocumentsPage() {
     }
   }
 
+  const folderDocuments = openFolder ? documents.filter((document) => document.category === openFolder) : documents;
+  // Documents with a category missing from the catalog still get a folder of their own.
+  const folderCategories = [...new Set([...categories, ...documents.map((document) => document.category)])];
+  const folders = folderCategories.map((category) => ({
+    category,
+    count: documents.filter((document) => document.category === category).length,
+  }));
+
   const statusCards = STATUS_FILTERS.map((filter) => {
     const count =
       filter === "all"
-        ? documents.length
-        : documents.filter((document) => getDocumentStatusGroup(document) === filter).length;
+        ? folderDocuments.length
+        : folderDocuments.filter((document) => getDocumentStatusGroup(document) === filter).length;
     const labelsByFilter = {
       all: labels.statAll,
       approved: labels.statApproved,
@@ -756,11 +796,14 @@ export function DocumentsPage() {
   });
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredDocuments = documents.filter((document) => {
+  const showFolderGrid = !openCategory && activeStatusFilter === "all" && !normalizedSearch;
+  const listTitle = openFolder
+    ? translateDocumentCategory(openFolder, language)
+    : openCategory === ALL_CATEGORIES
+      ? labels.allDocuments
+      : labels.foundDocuments;
+  const filteredDocuments = folderDocuments.filter((document) => {
     if (activeStatusFilter !== "all" && getDocumentStatusGroup(document) !== activeStatusFilter) {
-      return false;
-    }
-    if (categoryFilter && document.category !== categoryFilter) {
       return false;
     }
     if (!normalizedSearch) {
@@ -791,7 +834,7 @@ export function DocumentsPage() {
               {labels.templatePanel}
             </button>
           ) : null}
-          <button className="primary-button" type="button" onClick={() => setShowUploadPanel((value) => !value)}>
+          <button className="primary-button" type="button" onClick={toggleUploadPanel}>
             + {labels.newDocument}
           </button>
         </div>
@@ -914,20 +957,27 @@ export function DocumentsPage() {
               onChange={(event) => setSearchTerm(event.target.value)}
             />
           </label>
-          <label className="documents-model__category">
-            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="">{labels.category}</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {translateDocumentCategory(category, language)}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
+
+        {showFolderGrid || documentsLoading ? null : (
+          <div className="documents-list-heading">
+            <button className="ghost-button" type="button" onClick={showFolders}>
+              <ArrowLeft size={16} aria-hidden="true" />
+              {labels.backToFolders}
+            </button>
+            <h2>{listTitle}</h2>
+          </div>
+        )}
 
         {documentsLoading ? (
           <p className="documents-loading">Загрузка документов...</p>
+        ) : showFolderGrid ? (
+          <DocumentFolders
+            folders={folders}
+            total={documents.length}
+            onOpen={openDocumentCategory}
+            onShowAll={() => openDocumentCategory(ALL_CATEGORIES)}
+          />
         ) : filteredDocuments.length ? (
           <div className="documents-table">
             <div className="documents-table__head">

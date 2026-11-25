@@ -340,6 +340,68 @@ test("9. login does not reveal account status without the right password", async
   assert.equal((await call("POST", "/api/auth/login", { body: { username: "pending.user", password: "Password1" } })).status, 403);
 });
 
+test("a new registration is announced to administrators only", () => {
+  const db = store.readDb();
+  const recipients = db.notifications
+    .filter((item) => item.targetPath === "/admin" && item.text.includes("Жаңы Кызматкер"))
+    .map((item) => db.users.find((user) => user.id === item.userId).roleCode);
+  assert.ok(recipients.length > 0);
+  assert.ok(recipients.every((role) => role === "ADMIN"), recipients.join());
+});
+
+async function createRequest(token, title) {
+  const form = new FormData();
+  Object.entries({ type: "Кызматтык кат", documentTitle: title, reason: "Сыноо" }).forEach(([key, value]) => form.append(key, value));
+  form.append("attachment", new Blob(["%PDF-1.4\n%test\n"], { type: "application/pdf" }), "attachment.pdf");
+  const { status, data } = await call("POST", "/api/requests", { token, form });
+  assert.equal(status, 201);
+  return data.request;
+}
+
+test("a request can be deleted by the director or an administrator only", async () => {
+  const teacher = await login("teacher", "teacher123");
+  const request = await createRequest(teacher, "Өчүрүлүүчү арыз");
+  const uploadPath = path.join(UPLOAD_DIR, path.basename(request.attachment.filePath));
+  assert.ok(fs.existsSync(uploadPath));
+
+  assert.equal((await call("DELETE", `/api/requests/${request.id}`)).status, 401);
+  for (const [username, password] of [["teacher", "teacher123"], ["hr", "hr123456"]]) {
+    const token = await login(username, password);
+    assert.equal((await call("DELETE", `/api/requests/${request.id}`, { token })).status, 403);
+  }
+  assert.ok(store.readDb().requests.some((item) => item.id === request.id));
+
+  const director = await login("director", "director123");
+  assert.equal((await call("DELETE", `/api/requests/${request.id}`, { token: director })).status, 200);
+  assert.equal((await call("DELETE", `/api/requests/${request.id}`, { token: director })).status, 404);
+
+  const db = store.readDb();
+  assert.ok(!db.requests.some((item) => item.id === request.id));
+  assert.ok(!db.notifications.some((item) => String(item.targetPath).includes(request.id)), "no dead links are left");
+  assert.ok(db.auditLogs.some((log) => log.entityId === request.id && log.action === "Кайрылуу өчүрүлдү"));
+  await wait(100);
+  assert.ok(!fs.existsSync(uploadPath), "the attachment is removed");
+});
+
+test("deleting a signed request keeps its official document and other requests", async () => {
+  const teacher = await login("teacher", "teacher123");
+  const director = await login("director", "director123");
+  const request = await createRequest(teacher, "Кол коюлган арыз");
+  const other = await createRequest(teacher, "Калуучу арыз");
+  const signed = await call("PUT", `/api/requests/${request.id}/status`, { token: director, body: { status: "approved" } });
+  assert.equal(signed.status, 200);
+  const pdfName = path.basename(signed.data.request.officialDocument.filePath);
+
+  assert.equal((await call("DELETE", `/api/requests/${request.id}`, { token: director })).status, 200);
+  await wait(100);
+
+  const db = store.readDb();
+  assert.ok(db.documents.some((item) => item.sourceRequestId === request.id), "the archive record stays");
+  assert.ok(fs.existsSync(path.join(UPLOAD_DIR, pdfName)), "the official PDF stays");
+  assert.ok(db.requests.some((item) => item.id === other.id));
+  assert.equal((await call("GET", `/api/files/${pdfName}`, { token: director })).status, 200);
+});
+
 test("10. registration requires at least 8 characters", async () => {
   const response = await call("POST", "/api/auth/register", {
     body: {
