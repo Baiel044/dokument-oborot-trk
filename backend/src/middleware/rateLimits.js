@@ -31,4 +31,11 @@ const passwordResetLimiter = limiter({
   message: "Өтө көп суроо. Бир сааттан кийин кайра аракет кылыңыз.",
 });
 
-module.exports = { loginLimiter, registrationLimiter, passwordResetLimiter };
+// Public document check: enough for people scanning QR codes, too few to guess codes.
+const verificationLimiter = limiter({
+  windowMinutes: 15,
+  limit: 60,
+  message: "Өтө көп текшерүү. Бир аздан кийин кайра аракет кылыңыз.",
+});
+
+module.exports = { loginLimiter, registrationLimiter, passwordResetLimiter, verificationLimiter };

@@ -402,6 +402,67 @@ test("deleting a signed request keeps its official document and other requests",
   assert.equal((await call("GET", `/api/files/${pdfName}`, { token: director })).status, 200);
 });
 
+test("type-specific fields are checked, stored and kept through signing", async () => {
+  const teacher = await login("teacher", "teacher123");
+  const director = await login("director", "director123");
+  const post = (fields) => {
+    const form = new FormData();
+    Object.entries({ documentTitle: "Арыз", reason: "Сыноо", ...fields }).forEach(([key, value]) => form.append(key, value));
+    return call("POST", "/api/requests", { token: teacher, form });
+  };
+
+  const noTrip = await post({ type: "Иш сапарга чыгуу жөнүндө арыз", purpose: "Семинар" });
+  assert.equal(noTrip.status, 400);
+
+  const purchase = await post({
+    type: "Керектүү буюмдарды сатып алууга арыз",
+    amount: "1",
+    startDate: "2026-11-25",
+    items: JSON.stringify([
+      { name: "Кагаз", quantity: "10", price: "450" },
+      { name: "Тонер", quantity: "1", price: "2500,5" },
+    ]),
+  });
+  assert.equal(purchase.status, 201);
+  const created = purchase.data.request;
+  assert.equal(created.amount, 7000.5, "the total comes from the table, not the sent amount");
+  assert.equal(created.amountInWords, "жети миң сом элүү тыйын");
+  assert.equal(created.startDate, "", "a purchase has no period");
+
+  const signed = await call("PUT", `/api/requests/${created.id}/status`, { token: director, body: { status: "approved" } });
+  assert.equal(signed.status, 200);
+  assert.equal(signed.data.request.items.length, 2);
+  assert.ok(fs.existsSync(path.join(UPLOAD_DIR, path.basename(signed.data.request.officialDocument.filePath))));
+
+  const leave = await post({ type: "Өргүүгө арыз", amount: "500" });
+  assert.equal(leave.status, 201);
+  assert.equal(leave.data.request.amount, null, "a leave request keeps no amount");
+  assert.equal(leave.data.request.absenceTime, "Толук күн");
+});
+
+test("the QR check page confirms a signed request without signing in", async () => {
+  const teacher = await login("teacher", "teacher123");
+  const director = await login("director", "director123");
+  const request = await createRequest(teacher, "Текшерилүүчү арыз");
+  const signed = await call("PUT", `/api/requests/${request.id}/status`, { token: director, body: { status: "approved" } });
+  const code = signed.data.request.directorSignature.signatureCode;
+  assert.match(code, /^[0-9A-F]{16}$/);
+
+  const check = await call("GET", `/api/verify/${code.toLowerCase()}`);
+  assert.equal(check.status, 200);
+  assert.equal(check.data.valid, true);
+  assert.equal(check.data.document.documentTitle, "Текшерилүүчү арыз");
+  assert.equal(check.data.document.heading, "КЫЗМАТТЫК КАТ");
+  assert.ok(check.data.document.documentNumber);
+  assert.equal(check.data.document.email, undefined, "no contact details are shown");
+
+  assert.equal((await call("GET", "/api/verify/0000000000000000")).status, 404);
+  assert.equal((await call("GET", "/api/verify/not-a-code")).status, 404);
+
+  await call("DELETE", `/api/requests/${request.id}`, { token: director });
+  assert.equal((await call("GET", `/api/verify/${code}`)).status, 404, "a deleted request is no longer confirmed");
+});
+
 test("10. registration requires at least 8 characters", async () => {
   const response = await call("POST", "/api/auth/register", {
     body: {

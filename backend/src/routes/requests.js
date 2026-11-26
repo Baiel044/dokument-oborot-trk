@@ -11,6 +11,8 @@ const { generateOfficialRequestPdf } = require("../utils/officialPdf");
 const { getOrCreateDocumentNumber } = require("../utils/documentNumbering");
 const { DOCUMENT_EXTENSIONS, isAllowedDocumentFile } = require("../utils/uploadValidation");
 const { removeUnreferencedFiles } = require("../utils/uploadCleanup");
+const { getRequestFields, parseRequestDetails } = require("../utils/requestDetails");
+const { amountInWords, amountWithWords } = require("../utils/numberWords");
 
 const router = express.Router();
 
@@ -94,6 +96,12 @@ function normalizeRequest(request, users) {
     officialDocument: request.officialDocument || null,
     isOfficial: Boolean(request.isOfficial || request.officialDocument),
     attachment: request.attachment || null,
+    amount: typeof request.amount === "number" ? request.amount : null,
+    amountInWords: typeof request.amount === "number" ? amountInWords(request.amount) : "",
+    amountText: typeof request.amount === "number" ? amountWithWords(request.amount) : "",
+    items: Array.isArray(request.items) ? request.items : [],
+    destination: request.destination || "",
+    purpose: request.purpose || "",
     routeHistory: Array.isArray(request.routeHistory)
       ? request.routeHistory.map((step) => ({
           ...step,
@@ -207,6 +215,9 @@ function applyRequestFilters(requests, query) {
       request.type,
       request.reason,
       request.comment,
+      request.destination,
+      request.purpose,
+      ...(request.items || []).map((item) => item.name),
       request.status,
       request.authorName,
       request.authorRoleTitle,
@@ -351,12 +362,11 @@ router.post("/", authenticate, removeUploadOnFailure, upload.single("attachment"
     return res.status(403).json({ message: "Кайрылууну түзүү окутуучуга гана жеткиликтүү." });
   }
 
-  const { type, reason, comment, startDate, endDate, absenceTime, status, documentTitle } = req.body;
+  const { type, reason, comment, status, documentTitle } = req.body;
   const normalizedType = String(type || "").trim();
   const normalizedReason = String(reason || "").trim();
   const normalizedComment = String(comment || "").trim();
   const normalizedDocumentTitle = String(documentTitle || "").trim();
-  const normalizedAbsenceTime = String(absenceTime || "").trim();
 
   const missingFields = [];
   if (!normalizedType) {
@@ -373,12 +383,21 @@ router.post("/", authenticate, removeUploadOnFailure, upload.single("attachment"
     return res.status(400).json({ message: `Талааларды толтуруңуз: ${missingFields.join(", ")}.` });
   }
 
-  if (startDate && endDate && endDate < startDate) {
-    return res.status(400).json({ message: "Аяктоо күнү башталыш күндөн эрте боло албайт." });
+  const details = parseRequestDetails(normalizedType, req.body);
+  if (details.message) {
+    return res.status(400).json({ message: details.message });
   }
 
   const db = readDb();
   const createdAt = new Date().toISOString();
+  // Requests with a period start today and last the whole day unless the author says otherwise.
+  const periodDefaults = getRequestFields(normalizedType).includes("period")
+    ? {
+        startDate: details.values.startDate || createdAt.slice(0, 10),
+        endDate: details.values.endDate || createdAt.slice(0, 10),
+        absenceTime: details.values.absenceTime || "Толук күн",
+      }
+    : {};
   const parsedStatus = parseSubmittedStatus(status);
   const routeHistory = [
     buildRouteStep({
@@ -396,9 +415,8 @@ router.post("/", authenticate, removeUploadOnFailure, upload.single("attachment"
     documentTitle: normalizedDocumentTitle,
     reason: normalizedReason,
     comment: normalizedComment,
-    startDate: startDate || createdAt.slice(0, 10),
-    endDate: endDate || startDate || createdAt.slice(0, 10),
-    absenceTime: normalizedAbsenceTime || "Толук күн",
+    ...details.values,
+    ...periodDefaults,
     status: parsedStatus,
     initialRecipientRole: "DIRECTOR",
     currentRecipientRole: parsedStatus === STATUS_DRAFT ? "TEACHER" : "DIRECTOR",
@@ -484,16 +502,23 @@ router.put("/:id", authenticate, requireRequestEditPermission, removeUploadOnFai
   const nextDocumentTitle = String(req.body.documentTitle ?? request.documentTitle ?? "").trim();
   const nextReason = String(req.body.reason ?? request.reason ?? "").trim();
   const nextComment = String(req.body.comment ?? request.comment ?? "").trim();
-  const nextStartDate = String(req.body.startDate ?? request.startDate ?? "").trim();
-  const nextEndDate = String(req.body.endDate ?? request.endDate ?? "").trim();
-  const nextAbsenceTime = String(req.body.absenceTime ?? request.absenceTime ?? "").trim();
 
   if (!nextType || !nextDocumentTitle || !nextReason) {
     return res.status(400).json({ message: "Кайрылуунун түрүн, документтин аталышын жана мазмунун толтуруңуз." });
   }
 
-  if (nextStartDate && nextEndDate && nextEndDate < nextStartDate) {
-    return res.status(400).json({ message: "Аяктоо күнү башталыш күндөн эрте боло албайт." });
+  // Fields missing from the form keep their saved values.
+  const details = parseRequestDetails(nextType, {
+    startDate: req.body.startDate ?? request.startDate,
+    endDate: req.body.endDate ?? request.endDate,
+    absenceTime: req.body.absenceTime ?? request.absenceTime,
+    amount: req.body.amount ?? request.amount,
+    items: req.body.items ?? request.items,
+    destination: req.body.destination ?? request.destination,
+    purpose: req.body.purpose ?? request.purpose,
+  });
+  if (details.message) {
+    return res.status(400).json({ message: details.message });
   }
 
   const now = new Date().toISOString();
@@ -502,9 +527,7 @@ router.put("/:id", authenticate, requireRequestEditPermission, removeUploadOnFai
   request.documentTitle = nextDocumentTitle;
   request.reason = nextReason;
   request.comment = nextComment;
-  request.startDate = nextStartDate || request.startDate;
-  request.endDate = nextEndDate || nextStartDate || request.endDate;
-  request.absenceTime = nextAbsenceTime || request.absenceTime;
+  Object.assign(request, details.values);
   request.currentRecipientRole = "TEACHER";
   request.updatedAt = now;
 
@@ -717,6 +740,11 @@ async function updateRequestStatus(req, res) {
     if (isApprovalAction) {
       const author = db.users.find((user) => user.id === request.userId);
       const director = db.users.find((user) => user.id === req.user.id);
+      // An administrator may sign too, but the letter is always addressed to the college director.
+      const addressee =
+        director?.roleCode === "DIRECTOR"
+          ? director
+          : db.users.find((user) => user.roleCode === "DIRECTOR" && user.status === "active") || director;
       const existingOfficialDocument = db.documents.find((item) => item.sourceRequestId === request.id);
       const numberInfo = getOrCreateDocumentNumber(db, "statements", existingOfficialDocument);
 
@@ -734,7 +762,7 @@ async function updateRequestStatus(req, res) {
         },
         author,
         director,
-        targetRoleTitle: getRoleTitle("DIRECTOR"),
+        addressee,
       });
       Object.assign(document, numberInfo);
 

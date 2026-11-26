@@ -43,32 +43,47 @@ function readPageContent(page) {
     .join("\n");
 }
 
-/**
- * Finds the horizontal separator line under the letterhead (the lowest wide line
- * in the top half of the page) and returns the Y where the text should start.
- */
-function getTemplateContentStartY(page) {
+/** The horizontal separator line under the letterhead: the lowest wide line in the top half of the page. */
+function findSeparatorLine(page) {
   let content;
   try {
     content = readPageContent(page);
   } catch {
-    return TEMPLATE_CONTENT_START_Y;
+    return null;
   }
 
   const { width, height } = page.getSize();
   const lineRegex = /(-?[\d.]+)\s+(-?[\d.]+)\s+m\s+(-?[\d.]+)\s+(-?[\d.]+)\s+l/g;
-  let separatorY = null;
+  let separator = null;
 
   for (const match of content.matchAll(lineRegex)) {
     const [x1, y1, x2, y2] = match.slice(1, 5).map(Number);
     const isHorizontal = Math.abs(y1 - y2) < 1;
     const isWide = Math.abs(x2 - x1) > width / 2;
-    if (isHorizontal && isWide && y1 > height / 2 && (separatorY === null || y1 < separatorY)) {
-      separatorY = y1;
+    if (isHorizontal && isWide && y1 > height / 2 && (separator === null || y1 < separator.y)) {
+      separator = { y: y1, left: Math.min(x1, x2), right: Math.max(x1, x2) };
     }
   }
+  return separator;
+}
 
-  return separatorY === null ? TEMPLATE_CONTENT_START_Y : separatorY - TEMPLATE_LINE_GAP;
+/** Y where the text should start: right under the letterhead separator line. */
+function getTemplateContentStartY(page) {
+  const separator = findSeparatorLine(page);
+  return separator ? separator.y - TEMPLATE_LINE_GAP : TEMPLATE_CONTENT_START_Y;
+}
+
+/**
+ * Text area under the letterhead: it starts under the separator line and lines up with
+ * both of its ends, so the text never sticks out past the line.
+ */
+function getTemplateContentBox(page, fallbackMargin) {
+  const separator = findSeparatorLine(page);
+  const { width } = page.getSize();
+  if (!separator) {
+    return { startY: TEMPLATE_CONTENT_START_Y, left: fallbackMargin, right: width - fallbackMargin };
+  }
+  return { startY: separator.y - TEMPLATE_LINE_GAP, left: separator.left, right: separator.right };
 }
 
 module.exports = {
@@ -76,6 +91,7 @@ module.exports = {
   CUSTOM_TEMPLATE_PATH,
   LETTERHEAD_IMAGE_PATH,
   getLetterheadTemplatePath,
+  getTemplateContentBox,
   getTemplateContentStartY,
   hasLetterheadTemplate,
 };

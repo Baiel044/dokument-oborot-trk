@@ -34,6 +34,8 @@ module.exports = {
   BACKUP_DIR: path.resolve(process.env.BACKUP_DIR || path.join(DATA_DIR, "backups")),
   BACKUP_INTERVAL_HOURS: Number(process.env.BACKUP_INTERVAL_HOURS || 24),
   BACKUP_KEEP: Number(process.env.BACKUP_KEEP || 14),
+  // Public site address printed in the QR code of official PDFs.
+  PUBLIC_SITE_URL: (process.env.PUBLIC_SITE_URL || "https://iwin.edu.kg").replace(/\/+$/, ""),
   UPLOAD_DIR: path.resolve(process.env.UPLOAD_DIR || path.join(ROOT_DIR, "uploads")),
   FRONTEND_DIST_DIR: path.resolve(ROOT_DIR, "..", "frontend", "dist"),
 };

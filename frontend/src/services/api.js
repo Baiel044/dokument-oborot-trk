@@ -67,7 +67,9 @@ async function request(path, options = {}) {
     if (response.status === 401) {
       emitUnauthorized();
     }
-    throw new Error(data.message || translate(getStoredLanguage(), "common.requestError"));
+    const error = new Error(data.message || translate(getStoredLanguage(), "common.requestError"));
+    error.status = response.status;
+    throw error;
   }
 
   return data;
