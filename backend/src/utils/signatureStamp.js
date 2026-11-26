@@ -12,19 +12,50 @@ const TEXT_FONT_SIZE = 12;
 const NAME_FONT_SIZE = 14;
 const COLLEGE_TIME_ZONE = "Asia/Bishkek";
 
-/** "Дуйшенов Канат Райымбекович" → "К.Р. Дуйшенов". Names in any other form are left as they are. */
-function formatSignerName(fullName) {
+const KYRGYZ_PATRONYMIC = /^(уулу|кызы)$/i;
+const RUSSIAN_PATRONYMIC = /(вич|вна|ична)$/i;
+
+/**
+ * Reads a three-part name typed in either order:
+ * "Бактыбек уулу Байэл" or "Байэл Бактыбек уулу", "Дуйшенов Канат Райымбекович" or "Канат Райымбекович Дуйшенов".
+ * Returns null for names it cannot read, which are then shown as typed.
+ */
+function parseName(fullName) {
   const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length !== 3) {
-    return parts.join(" ");
+    return null;
   }
 
-  const [surname, second, third] = parts;
-  if (/^(уулу|кызы)$/i.test(second)) {
-    return `${third[0]}. ${surname} ${second}`;
+  const [first, second, third] = parts;
+  if (KYRGYZ_PATRONYMIC.test(second)) {
+    return { surname: `${first} ${second}`, given: third, patronymic: "" };
   }
+  if (KYRGYZ_PATRONYMIC.test(third)) {
+    return { surname: `${second} ${third}`, given: first, patronymic: "" };
+  }
+  if (RUSSIAN_PATRONYMIC.test(second)) {
+    return { surname: third, given: first, patronymic: second };
+  }
+  return { surname: first, given: second, patronymic: third };
+}
 
-  return `${second[0]}.${third[0]}. ${surname}`;
+/** Full name in the Kyrgyz order: "Бактыбек уулу Байэл", "Дуйшенов Канат Райымбекович". */
+function formatFullName(fullName) {
+  const name = parseName(fullName);
+  if (!name) {
+    return String(fullName || "").trim().split(/\s+/).filter(Boolean).join(" ");
+  }
+  return [name.surname, name.given, name.patronymic].filter(Boolean).join(" ");
+}
+
+/** Initials and surname: "К.Р. Дуйшенов", "Б. Бактыбек уулу". */
+function formatSignerName(fullName) {
+  const name = parseName(fullName);
+  if (!name) {
+    return formatFullName(fullName);
+  }
+  const initials = [name.given, name.patronymic].filter(Boolean).map((part) => `${part[0]}.`).join("");
+  return `${initials} ${name.surname}`;
 }
 
 /** The server runs in UTC, so the college time zone is always set explicitly. */
@@ -90,6 +121,7 @@ module.exports = {
   COLLEGE_TIME_ZONE,
   STAMP_HEIGHT,
   drawSignatureStamp,
+  formatFullName,
   formatSignedAt,
   formatSignerName,
 };

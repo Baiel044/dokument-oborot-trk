@@ -6,6 +6,14 @@ import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { api } from "../../services/api";
 import { getLocale, translateRequestStatus, translateRequestType, translateRole } from "../../utils/localization";
+import {
+  RequestTypeFields,
+  RequestTypeSummary,
+  appendTypeFields,
+  emptyItem,
+  getTypeFields,
+  validateTypeFields,
+} from "./RequestTypeFields";
 
 const DIRECTOR_REVIEW_STATUS = "Директор карап жатат";
 const DRAFT_STATUS = "Долбоор";
@@ -52,6 +60,10 @@ function createInitialForm(language) {
     startDate: "",
     endDate: "",
     absenceTime: DEFAULT_ABSENCE_TIME[language] || DEFAULT_ABSENCE_TIME.ky,
+    amount: "",
+    items: [emptyItem()],
+    destination: "",
+    purpose: "",
     status: DIRECTOR_REVIEW_STATUS,
     attachment: null,
   };
@@ -66,6 +78,12 @@ function createEditForm(requestItem) {
     startDate: requestItem.startDate || "",
     endDate: requestItem.endDate || "",
     absenceTime: requestItem.absenceTime || "",
+    amount: typeof requestItem.amount === "number" ? String(requestItem.amount) : "",
+    items: requestItem.items?.length
+      ? requestItem.items.map((item) => ({ name: item.name, quantity: String(item.quantity), price: String(item.price) }))
+      : [emptyItem()],
+    destination: requestItem.destination || "",
+    purpose: requestItem.purpose || "",
     attachment: null,
   };
 }
@@ -142,6 +160,7 @@ export function RequestsPage() {
   const [requests, setRequests] = useState([]);
   const [requestTypes, setRequestTypes] = useState([]);
   const [requestTypeGroups, setRequestTypeGroups] = useState([]);
+  const [requestTypeFields, setRequestTypeFields] = useState(null);
   const [requestStatuses, setRequestStatuses] = useState([]);
   const [filters, setFilters] = useState({
     status: "",
@@ -373,9 +392,7 @@ export function RequestsPage() {
       errors.reason = t("requests.reasonRequired");
     }
 
-    if (values.startDate && values.endDate && values.endDate < values.startDate) {
-      errors.endDate = t("requests.invalidDates");
-    }
+    Object.assign(errors, validateTypeFields(getTypeFields(requestTypeFields, values.type), values, t));
 
     return errors;
   }
@@ -395,6 +412,7 @@ export function RequestsPage() {
     setRequests(requestsData.requests);
     setRequestTypes(catalogs.requestTypes);
     setRequestTypeGroups(catalogs.requestTypeGroups || []);
+    setRequestTypeFields(catalogs.requestTypeFields || null);
     setRequestStatuses(catalogs.requestStatuses || []);
   }
 
@@ -458,9 +476,7 @@ export function RequestsPage() {
       payload.append("documentTitle", form.documentTitle.trim());
       payload.append("reason", form.reason.trim());
       payload.append("comment", form.comment.trim());
-      payload.append("startDate", form.startDate);
-      payload.append("endDate", form.endDate);
-      payload.append("absenceTime", form.absenceTime.trim());
+      appendTypeFields(payload, getTypeFields(requestTypeFields, form.type), form);
       payload.append("status", form.status);
 
       if (form.attachment) {
@@ -553,9 +569,7 @@ export function RequestsPage() {
       payload.append("documentTitle", editForm.documentTitle.trim());
       payload.append("reason", editForm.reason.trim());
       payload.append("comment", editForm.comment.trim());
-      payload.append("startDate", editForm.startDate);
-      payload.append("endDate", editForm.endDate);
-      payload.append("absenceTime", editForm.absenceTime.trim());
+      appendTypeFields(payload, getTypeFields(requestTypeFields, editForm.type), editForm);
 
       if (editForm.attachment) {
         payload.append("attachment", editForm.attachment);
@@ -702,26 +716,14 @@ export function RequestsPage() {
               ) : null}
             </label>
 
-            <label>
-              {t("requests.startDate")}
-              <input type="date" value={form.startDate} onChange={(event) => updateField("startDate", event.target.value)} />
-            </label>
-
-            <label>
-              {t("requests.endDate")}
-              <input
-                className={fieldErrors.endDate ? "input-error" : ""}
-                type="date"
-                value={form.endDate}
-                onChange={(event) => updateField("endDate", event.target.value)}
-              />
-              {fieldErrors.endDate ? <span className="field-error-text">{fieldErrors.endDate}</span> : null}
-            </label>
-
-            <label>
-              {t("requests.absenceTime")}
-              <input value={form.absenceTime} onChange={(event) => updateField("absenceTime", event.target.value)} />
-            </label>
+            <RequestTypeFields
+              fields={getTypeFields(requestTypeFields, form.type)}
+              values={form}
+              errors={fieldErrors}
+              onChange={updateField}
+              t={t}
+              fullWidthClass="grid-form__full"
+            />
 
             <label>
               {t("requests.sendMode")}
@@ -976,6 +978,8 @@ export function RequestsPage() {
 
                 <p className="request-detail-card__reason">{readableReason}</p>
 
+                <RequestTypeSummary item={item} fields={getTypeFields(requestTypeFields, item.type)} t={t} />
+
                 {item.directorSignature ? (
                   <div className="request-signature-details">
                     <p>
@@ -1017,31 +1021,14 @@ export function RequestsPage() {
                         <span className="field-error-text">{editFieldErrors.documentTitle}</span>
                       ) : null}
                     </label>
-                    <label>
-                      {t("requests.startDate")}
-                      <input
-                        type="date"
-                        value={editForm.startDate}
-                        onChange={(event) => updateEditField("startDate", event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      {t("requests.endDate")}
-                      <input
-                        className={editFieldErrors.endDate ? "input-error" : ""}
-                        type="date"
-                        value={editForm.endDate}
-                        onChange={(event) => updateEditField("endDate", event.target.value)}
-                      />
-                      {editFieldErrors.endDate ? <span className="field-error-text">{editFieldErrors.endDate}</span> : null}
-                    </label>
-                    <label>
-                      {t("requests.absenceTime")}
-                      <input
-                        value={editForm.absenceTime}
-                        onChange={(event) => updateEditField("absenceTime", event.target.value)}
-                      />
-                    </label>
+                    <RequestTypeFields
+                      fields={getTypeFields(requestTypeFields, editForm.type)}
+                      values={editForm}
+                      errors={editFieldErrors}
+                      onChange={updateEditField}
+                      t={t}
+                      fullWidthClass="request-edit-form__full"
+                    />
                     <label className="request-edit-form__full">
                       {t("requests.reason")}
                       <textarea

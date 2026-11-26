@@ -106,6 +106,7 @@ npm run backup             # колго backup (сервер токтоп тур
 | `BACKUP_INTERVAL_HOURS` (24), `BACKUP_KEEP` (14) | Backup графиги жана канча көчүрмө сакталары |
 | `CORS_ORIGIN` | Үтүр менен бөлүнгөн тизме. `https://*-x.vercel.app` сыяктуу wildcard колдоого алынат |
 | `TRUST_PROXY` | Production'до демейки `1` (Railway прокси) |
+| `PUBLIC_SITE_URL` | Расмий PDF'теги QR-коддун дареги (демейки `https://iwin.edu.kg`). QR `<дарек>/verify/<ЭЦП коду>` барагын ачат |
 | `DB_LOCK_TIMEOUT_MS` | Redeploy учурунда мурунку процесстин базаны бошотушун канча күтүү керек |
 
 Frontend: `VITE_API_URL` (бош болсо, ошол эле origin колдонулат). Бул маани **build учурунда** кодго кошулат, ошондуктан өзгөргөндөн кийин Vercel'де Redeploy керек.

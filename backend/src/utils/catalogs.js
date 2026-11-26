@@ -26,6 +26,7 @@ const REQUEST_TYPES = [
   "Керектүү буюмдарды сатып алууга арыз",
   "Аванс же акча каражатын бөлүүгө арыз",
   "Оңдоо иштерине арыз (имарат, жабдык, унаа)",
+  "Күйүүчү май алууга арыз",
 ];
 
 // Тандоо тизмесинде өзүнчө аталыш алдында көрсөтүлүүчү түрлөр. Ар бири REQUEST_TYPES ичинде да болушу керек.
@@ -37,9 +38,24 @@ const REQUEST_TYPE_GROUPS = [
       "Керектүү буюмдарды сатып алууга арыз",
       "Аванс же акча каражатын бөлүүгө арыз",
       "Оңдоо иштерине арыз (имарат, жабдык, унаа)",
+      "Күйүүчү май алууга арыз",
     ],
   },
 ];
+
+// Extra fields shown in the form and the PDF:
+// period — dates and time away, amount — sum in figures and words,
+// items — purchase table whose total is the amount, trip — destination and purpose.
+const REQUEST_TYPE_FIELDS = {
+  "Жумуштан суранып чыгуу": ["period"],
+  "Өргүүгө арыз": ["period"],
+  "Жүйөлүү себеп боюнча арыз": ["period"],
+  "Иш сапарга чыгуу жөнүндө арыз": ["period", "trip"],
+  "Керектүү буюмдарды сатып алууга арыз": ["amount", "items"],
+  "Аванс же акча каражатын бөлүүгө арыз": ["amount"],
+  "Оңдоо иштерине арыз (имарат, жабдык, унаа)": ["amount"],
+  "Күйүүчү май алууга арыз": ["amount"],
+};
 
 const REQUEST_STATUSES = [
   "draft",
@@ -156,6 +172,7 @@ module.exports = {
   DEPARTMENTS,
   REQUEST_TYPES,
   REQUEST_TYPE_GROUPS,
+  REQUEST_TYPE_FIELDS,
   REQUEST_STATUSES,
   DOCUMENT_CATEGORIES,
   normalizeDocumentCategory,

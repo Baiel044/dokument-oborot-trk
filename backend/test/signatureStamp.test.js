@@ -1,7 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { PDFDocument, StandardFonts } = require("pdf-lib");
-const { STAMP_HEIGHT, drawSignatureStamp, formatSignerName, formatSignedAt } = require("../src/utils/signatureStamp");
+const {
+  STAMP_HEIGHT,
+  drawSignatureStamp,
+  formatFullName,
+  formatSignerName,
+  formatSignedAt,
+} = require("../src/utils/signatureStamp");
 
 test("signer name is shortened to initials and surname", () => {
   assert.equal(formatSignerName("Дуйшенов Канат Райымбекович"), "К.Р. Дуйшенов");
@@ -11,6 +17,21 @@ test("signer name is shortened to initials and surname", () => {
 test("уулу / кызы stays with the surname", () => {
   assert.equal(formatSignerName("Бактыбек уулу Байэл"), "Б. Бактыбек уулу");
   assert.equal(formatSignerName("Асан кызы Айжан"), "А. Асан кызы");
+});
+
+test("names typed given name first are put in the Kyrgyz order", () => {
+  assert.equal(formatFullName("Байэл Бактыбек уулу"), "Бактыбек уулу Байэл");
+  assert.equal(formatSignerName("Байэл Бактыбек уулу"), "Б. Бактыбек уулу");
+  assert.equal(formatFullName("Айжан Асан кызы"), "Асан кызы Айжан");
+  assert.equal(formatFullName("Канат Райымбекович Дуйшенов"), "Дуйшенов Канат Райымбекович");
+  assert.equal(formatSignerName("Канышай Бабатаевна Асанова"), "К.Б. Асанова");
+});
+
+test("names already in the Kyrgyz order stay as they are", () => {
+  assert.equal(formatFullName("Бактыбек уулу Байэл"), "Бактыбек уулу Байэл");
+  assert.equal(formatFullName("Дуйшенов Канат Райымбекович"), "Дуйшенов Канат Райымбекович");
+  assert.equal(formatFullName("Nuris Tilekbergiev"), "Nuris Tilekbergiev");
+  assert.equal(formatFullName("  Бадолотова   Бермет "), "Бадолотова Бермет");
 });
 
 test("names that are not surname + name + patronymic are left as they are", () => {

@@ -15,6 +15,7 @@ import { ProfilePage } from "./pages/profile/ProfilePage";
 import { UsersPage } from "./pages/users/UsersPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { AdminPage } from "./pages/admin/AdminPage";
+import { VerifyPage } from "./pages/verify/VerifyPage";
 import { ChunkErrorBoundary } from "./components/ui/ChunkErrorBoundary";
 import { lazyWithReload } from "./utils/lazyWithReload";
 
@@ -44,6 +45,9 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
+      {/* Public: opened by the QR code of an official PDF. */}
+      <Route path="/verify" element={<VerifyPage />} />
+      <Route path="/verify/:code" element={<VerifyPage />} />
 
       <Route path="/" element={homeElement}>
         <Route index element={<DashboardPage />} />

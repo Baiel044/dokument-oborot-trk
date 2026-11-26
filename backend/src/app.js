@@ -5,7 +5,7 @@ const helmet = require("helmet");
 const path = require("path");
 const { ensureStorage } = require("./data/store");
 const { CORS_ORIGIN, FRONTEND_DIST_DIR, IS_PRODUCTION, TRUST_PROXY, UPLOAD_DIR } = require("./utils/config");
-const { loginLimiter, passwordResetLimiter, registrationLimiter } = require("./middleware/rateLimits");
+const { loginLimiter, passwordResetLimiter, verificationLimiter, registrationLimiter } = require("./middleware/rateLimits");
 
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
@@ -18,6 +18,7 @@ const metaRoutes = require("./routes/meta");
 const reportsRoutes = require("./routes/reports");
 const auditRoutes = require("./routes/audit");
 const filesRoutes = require("./routes/files");
+const verifyRoutes = require("./routes/verify");
 
 ensureStorage();
 
@@ -96,6 +97,7 @@ app.use("/uploads", (_req, res) => {
   res.status(404).json({ message: "Files are available only through protected API routes." });
 });
 app.use("/api/meta", metaRoutes);
+app.use("/api/verify", verificationLimiter, verifyRoutes);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", registrationLimiter);
 app.use("/api/auth/forgot-password", passwordResetLimiter);
